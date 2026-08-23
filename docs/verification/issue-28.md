@@ -27,6 +27,18 @@ Verification date: 2026-08-23 UTC.
 - Both live Google IdP credentials exactly match their new Secrets Manager
   values. Existing callback URLs, code flow, Google-only provider selection,
   and public-client behavior remain intact.
+- One-time development backend bootstrap plan: five expected creates, no
+  updates/replacements/deletes. The normal policy correctly rejected the log
+  group's protected first-create before the explicitly authorized bootstrap.
+- Non-main bootstrap artifact commit:
+  `6c4c3c8fa7d359adab8a364d935785a5cac43c03`.
+- Lambda zip SHA-256:
+  `15b8390af3c74beafbaa7f97d0e21a738565358302aa12c7c193d60e0c950470`.
+- Live development Lambda version 1 matches the commit and digest; the active
+  alias matches both, direct invocation returns the health response, stable
+  tags match, log retention is 30 days, and the execution-role boundary is
+  attached.
+- Development backend steady-state plan: policy accepted, no changes.
 
 No Cognito address was created, deleted, replaced, moved, or modified during
 the transfer.
