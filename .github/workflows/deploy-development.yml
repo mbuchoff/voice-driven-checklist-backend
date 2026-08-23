@@ -156,8 +156,11 @@ jobs:
         shell: bash
         run: |
           function_name=$(tofu -chdir=infra/aws/backend output -raw function_name)
-          configuration=$(aws lambda get-function-configuration --function-name "$function_name")
           alias=$(aws lambda get-alias --function-name "$function_name" --name active)
+          function_version=$(jq -r .FunctionVersion <<< "$alias")
+          configuration=$(aws lambda get-function-configuration \
+            --function-name "$function_name" \
+            --qualifier "$function_version")
           jq -e \
             --arg digest "${{ steps.package.outputs.digest }}" \
             --arg commit "${{ steps.selection.outputs.sha }}" \
