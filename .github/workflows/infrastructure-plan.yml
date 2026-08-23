@@ -65,7 +65,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: us-east-1
-          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::198771014193:role/voice-checklist-github-plan
           role-session-name: pull-request-plan
       - name: Plan authentication without mutation
         shell: bash
@@ -98,7 +98,7 @@ jobs:
               -var="artifact_sha256=$ARTIFACT_SHA256" \
               -var="commit_sha=${{ github.event.pull_request.head.sha }}" \
               -var="deployment_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              -var="permissions_boundary_arn=${{ vars.AWS_DEPLOYMENT_BOUNDARY_ARN }}" \
+              -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary" \
               -out="/tmp/backend-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
               > "/tmp/backend-$environment.json"

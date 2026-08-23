@@ -119,7 +119,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           aws-region: us-east-1
-          role-to-assume: ${{ vars.AWS_DEVELOPMENT_DEPLOY_ROLE_ARN }}
+          role-to-assume: arn:aws:iam::198771014193:role/voice-checklist-github-development-deploy
           role-session-name: development-deployment
       - name: Plan guarded development deployment
         working-directory: candidate
@@ -135,7 +135,7 @@ jobs:
             -var="artifact_sha256=${{ steps.package.outputs.sha256 }}" \
             -var="commit_sha=${{ steps.selection.outputs.sha }}" \
             -var="deployment_url=${{ steps.deployment.outputs.url }}" \
-            -var="permissions_boundary_arn=${{ vars.AWS_DEPLOYMENT_BOUNDARY_ARN }}" \
+            -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary" \
             -out=/tmp/backend-development.tfplan >/dev/null
           tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
             > /tmp/backend-development.json
