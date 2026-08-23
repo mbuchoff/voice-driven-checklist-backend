@@ -15,6 +15,28 @@ variable "repository" {
   }
 }
 
+variable "repository_id" {
+  description = "Immutable GitHub repository ID trusted by the OIDC roles."
+  type        = number
+  default     = 1344113852
+
+  validation {
+    condition     = var.repository_id > 0 && floor(var.repository_id) == var.repository_id
+    error_message = "repository_id must be a positive integer."
+  }
+}
+
+variable "repository_owner_id" {
+  description = "Immutable GitHub repository owner ID trusted by the OIDC roles."
+  type        = number
+  default     = 13501758
+
+  validation {
+    condition     = var.repository_owner_id > 0 && floor(var.repository_owner_id) == var.repository_owner_id
+    error_message = "repository_owner_id must be a positive integer."
+  }
+}
+
 variable "state_bucket" {
   description = "Pre-existing encrypted and versioned S3 bucket for OpenTofu state."
   type        = string

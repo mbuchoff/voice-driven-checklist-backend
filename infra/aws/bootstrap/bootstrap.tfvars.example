@@ -1,3 +1,5 @@
-aws_region   = "us-east-1"
-repository   = "mbuchoff/voice-driven-checklist-backend"
-state_bucket = "voice-checklist-tofu-state-use1-198771014193"
+aws_region          = "us-east-1"
+repository          = "mbuchoff/voice-driven-checklist-backend"
+repository_id       = 1344113852
+repository_owner_id = 13501758
+state_bucket        = "voice-checklist-tofu-state-use1-198771014193"

@@ -4,6 +4,10 @@ This manual-only root creates the GitHub OIDC provider, read-only plan role,
 environment deployment roles, and shared permissions boundary. No GitHub
 workflow is authorized to apply its state or modify these roles.
 
+The trust policies include GitHub's immutable owner and repository IDs in each
+OIDC subject. Update both the names and IDs in `bootstrap.tfvars` if ownership
+changes; a repository rename alone does not change the IDs.
+
 The state bucket is a pre-existing dependency. Verify it before bootstrap:
 
 ```bash

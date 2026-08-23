@@ -2,6 +2,9 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 locals {
+  repository_parts   = split("/", var.repository)
+  repository_subject = "${local.repository_parts[0]}@${var.repository_owner_id}/${local.repository_parts[1]}@${var.repository_id}"
+
   account_id          = data.aws_caller_identity.current.account_id
   partition           = data.aws_partition.current.partition
   boundary_name       = "voice-checklist-github-deployment-boundary"
@@ -162,7 +165,7 @@ resource "aws_iam_role" "github_plan" {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.repository}:pull_request"
+          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:pull_request"
         }
       }
     }]
@@ -241,7 +244,7 @@ locals {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.repository}:environment:development"
+          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:environment:development"
         }
       }
     }]
@@ -258,7 +261,7 @@ locals {
       Condition = {
         StringEquals = {
           "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${var.repository}:environment:production"
+          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:environment:production"
         }
       }
     }]
