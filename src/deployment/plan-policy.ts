@@ -91,3 +91,28 @@ export function findProtectedChangeViolations(
       : [`${address}: protected address has forbidden actions [${actionSet}]`];
   });
 }
+
+export function findReconstructableDestructiveViolations(
+  plan: OpenTofuPlan,
+  protectedAddresses: readonly string[],
+  allowDestructiveChanges: boolean,
+): string[] {
+  if (allowDestructiveChanges) {
+    return [];
+  }
+
+  const protectedAddressSet = new Set(protectedAddresses);
+  return (plan.resource_changes ?? []).flatMap((change) => {
+    const isReconstructableManagedResource =
+      change.mode === 'managed' && !protectedAddressSet.has(change.address);
+    const isDestructive = change.change.actions.some((action) =>
+      ['delete', 'forget'].includes(action),
+    );
+
+    return isReconstructableManagedResource && isDestructive
+      ? [
+          `${change.address}: reconstructable deletion or replacement requires explicit authorization`,
+        ]
+      : [];
+  });
+}

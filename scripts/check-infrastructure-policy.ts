@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 
 import { findLifecycleGuardViolations } from '../src/deployment/lifecycle-policy.js';
 import {
+  findReconstructableDestructiveViolations,
   findProtectedChangeViolations,
   parseOpenTofuPlan,
   parsePolicyManifest,
@@ -13,17 +14,24 @@ async function readJson(path: string): Promise<unknown> {
 }
 
 async function main(): Promise<void> {
-  const [planPath, manifestPath, configurationDirectory, ...unexpected] =
-    process.argv.slice(2);
+  const [
+    planPath,
+    manifestPath,
+    configurationDirectory,
+    destructiveOverride,
+    ...unexpected
+  ] = process.argv.slice(2);
 
   if (
     planPath === undefined ||
     manifestPath === undefined ||
     configurationDirectory === undefined ||
-    unexpected.length > 0
+    unexpected.length > 0 ||
+    (destructiveOverride !== undefined &&
+      destructiveOverride !== '--allow-reconstructable-destroy')
   ) {
     throw new Error(
-      'Usage: check-infrastructure-policy <plan.json> <manifest.json> <configuration-directory>',
+      'Usage: check-infrastructure-policy <plan.json> <manifest.json> <configuration-directory> [--allow-reconstructable-destroy]',
     );
   }
 
@@ -31,6 +39,11 @@ async function main(): Promise<void> {
   const plan = parseOpenTofuPlan(await readJson(resolve(planPath)));
   const violations = [
     ...findProtectedChangeViolations(plan, manifest.planAddresses),
+    ...findReconstructableDestructiveViolations(
+      plan,
+      manifest.planAddresses,
+      destructiveOverride === '--allow-reconstructable-destroy',
+    ),
     ...(await findLifecycleGuardViolations(
       resolve(configurationDirectory),
       manifest.lifecycleBlocks,
