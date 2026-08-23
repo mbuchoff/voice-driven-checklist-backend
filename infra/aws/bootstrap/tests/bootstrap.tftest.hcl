@@ -56,6 +56,15 @@ run "repository_trust_contract" {
   }
 }
 
+run "plan_secret_read_contract" {
+  command = plan
+
+  assert {
+    condition     = strcontains(aws_iam_role_policy.plan.policy, "secretsmanager:GetResourcePolicy")
+    error_message = "The read-only plan role must be able to inspect managed secret resource policies."
+  }
+}
+
 run "production_cognito_delete_deny_contract" {
   command = plan
 
