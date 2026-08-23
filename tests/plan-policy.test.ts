@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findProtectedChangeViolations,
+  parseOpenTofuPlan,
   parsePolicyManifest,
   type OpenTofuPlan,
 } from '../src/deployment/plan-policy.js';
@@ -27,6 +28,12 @@ describe('protected OpenTofu plan policy', () => {
     expect(() => parsePolicyManifest({ planAddresses: [''] })).toThrowError(
       /protected-resource manifest/i,
     );
+  });
+
+  it('rejects malformed OpenTofu plan JSON', () => {
+    expect(() =>
+      parseOpenTofuPlan({ resource_changes: 'not-an-array' }),
+    ).toThrowError(/OpenTofu plan/i);
   });
 
   it('accepts only no-op and in-place update actions for every protected address', () => {
