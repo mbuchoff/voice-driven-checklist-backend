@@ -13,9 +13,11 @@ mock_provider "aws" {
 }
 
 variables {
-  aws_region   = "us-east-1"
-  repository   = "mbuchoff/voice-driven-checklist-backend"
-  state_bucket = "voice-checklist-tofu-state-use1-198771014193"
+  aws_region          = "us-east-1"
+  repository          = "mbuchoff/voice-driven-checklist-backend"
+  repository_id       = 1344113852
+  repository_owner_id = 13501758
+  state_bucket        = "voice-checklist-tofu-state-use1-198771014193"
 }
 
 run "github_oidc_contract" {
@@ -46,9 +48,9 @@ run "repository_trust_contract" {
 
   assert {
     condition = (
-      strcontains(aws_iam_role.github_plan.assume_role_policy, "repo:mbuchoff/voice-driven-checklist-backend:pull_request") &&
-      strcontains(aws_iam_role.github_development_deploy.assume_role_policy, "repo:mbuchoff/voice-driven-checklist-backend:environment:development") &&
-      strcontains(aws_iam_role.github_production_deploy.assume_role_policy, "repo:mbuchoff/voice-driven-checklist-backend:environment:production")
+      strcontains(aws_iam_role.github_plan.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:pull_request") &&
+      strcontains(aws_iam_role.github_development_deploy.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:environment:development") &&
+      strcontains(aws_iam_role.github_production_deploy.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:environment:production")
     )
     error_message = "Each role must trust only the intended repository context."
   }
