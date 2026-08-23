@@ -55,8 +55,7 @@ jobs:
         working-directory: candidate
         run: |
           npm run build
-          mkdir -p dist/artifact
-          (cd dist/handler && zip -X -9 ../artifact/lambda.zip index.js)
+          npm run package:artifact
           echo "ARTIFACT_SHA256=$(sha256sum dist/artifact/lambda.zip | cut -d' ' -f1)" >> "$GITHUB_ENV"
           echo "ARTIFACT_DIGEST=$(openssl dgst -sha256 -binary dist/artifact/lambda.zip | openssl base64 -A)" >> "$GITHUB_ENV"
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2

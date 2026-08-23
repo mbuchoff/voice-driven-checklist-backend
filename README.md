@@ -20,6 +20,7 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run package:artifact
 tofu fmt -check -recursive infra
 ```
 

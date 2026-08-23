@@ -77,8 +77,7 @@ jobs:
         working-directory: candidate
         shell: bash
         run: |
-          mkdir -p dist/artifact
-          (cd dist/handler && zip -X -9 ../artifact/lambda.zip index.js)
+          npm run package:artifact
           artifact_sha256=$(sha256sum dist/artifact/lambda.zip | cut -d' ' -f1)
           artifact_digest=$(openssl dgst -sha256 -binary dist/artifact/lambda.zip | openssl base64 -A)
           echo "sha256=$artifact_sha256" >> "$GITHUB_OUTPUT"
