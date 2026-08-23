@@ -88,6 +88,16 @@ describe('GitHub Actions policy', () => {
     });
   });
 
+  it('verifies the immutable Lambda version selected by the active alias', async () => {
+    const configuration = await workflow('deploy-development');
+    const commands = runs(configuration);
+
+    expect(commands).toContain(
+      'function_version=$(jq -r .FunctionVersion <<< "$alias")',
+    );
+    expect(commands).toContain('--qualifier "$function_version"');
+  });
+
   it.each(['ci', 'infrastructure-plan', 'deploy-development'])(
     'pins every third-party action in %s to a full commit SHA',
     async (name) => {
