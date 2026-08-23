@@ -5,10 +5,9 @@ import {
   type OpenTofuPlan,
 } from '../src/deployment/plan-policy.js';
 
-const protectedAddresses = [
-  'aws_cognito_user_pool.auth',
-  'aws_cognito_user_pool_client.app["android_play"]',
-];
+const userPoolAddress = 'aws_cognito_user_pool.auth';
+const clientAddress = 'aws_cognito_user_pool_client.app["android_play"]';
+const protectedAddresses = [userPoolAddress, clientAddress];
 
 function planWith(
   changes: Array<{ address: string; actions: string[] }>,
@@ -25,8 +24,8 @@ function planWith(
 describe('protected OpenTofu plan policy', () => {
   it('accepts only no-op and in-place update actions for every protected address', () => {
     const plan = planWith([
-      { address: protectedAddresses[0]!, actions: ['no-op'] },
-      { address: protectedAddresses[1]!, actions: ['update'] },
+      { address: userPoolAddress, actions: ['no-op'] },
+      { address: clientAddress, actions: ['update'] },
     ]);
 
     expect(findProtectedChangeViolations(plan, protectedAddresses)).toEqual([]);
@@ -39,22 +38,22 @@ describe('protected OpenTofu plan policy', () => {
     ['forget', ['forget']],
   ])('rejects a protected %s action', (_name, actions) => {
     const plan = planWith([
-      { address: protectedAddresses[0]!, actions },
-      { address: protectedAddresses[1]!, actions: ['no-op'] },
+      { address: userPoolAddress, actions },
+      { address: clientAddress, actions: ['no-op'] },
     ]);
 
     expect(findProtectedChangeViolations(plan, protectedAddresses)).toEqual([
-      expect.stringContaining(protectedAddresses[0]!),
+      expect.stringContaining(userPoolAddress),
     ]);
   });
 
   it('fails closed when a protected address is absent from the plan', () => {
     const plan = planWith([
-      { address: protectedAddresses[0]!, actions: ['no-op'] },
+      { address: userPoolAddress, actions: ['no-op'] },
     ]);
 
     expect(findProtectedChangeViolations(plan, protectedAddresses)).toEqual([
-      expect.stringContaining(protectedAddresses[1]!),
+      expect.stringContaining(clientAddress),
     ]);
   });
 });

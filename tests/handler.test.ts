@@ -4,13 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { handler } from '../src/handler.js';
 
 describe('placeholder Lambda', () => {
-  it('returns a harmless health response without exposing runtime input', async () => {
+  it('returns a harmless health response without exposing runtime input', () => {
     const sensitiveInput = { authorization: 'must-not-be-returned' };
 
-    const response = await handler(sensitiveInput, {} as Context);
+    const response = handler(sensitiveInput, {} as Context);
+    const body = response.body ?? '';
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body)).toEqual({ status: 'ok' });
-    expect(response.body).not.toContain(sensitiveInput.authorization);
+    expect(JSON.parse(body)).toEqual({ status: 'ok' });
+    expect(body).not.toContain(sensitiveInput.authorization);
   });
 });

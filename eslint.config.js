@@ -3,7 +3,10 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.strictTypeChecked.map((config) => ({
+    ...config,
+    files: ['**/*.ts'],
+  })),
   {
     ignores: ['coverage/**', 'dist/**'],
   },
