@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findProtectedChangeViolations,
+  findReconstructableDestructiveViolations,
   parseOpenTofuPlan,
   parsePolicyManifest,
   type OpenTofuPlan,
@@ -106,5 +107,51 @@ describe('protected OpenTofu plan policy', () => {
     expect(findProtectedChangeViolations(plan, protectedAddresses)).toEqual([
       expect.stringContaining(clientAddress),
     ]);
+  });
+});
+
+describe('reconstructable resource plan policy', () => {
+  const functionAddress = 'aws_lambda_function.placeholder[0]';
+
+  it('allows a reconstructable create without a destructive override', () => {
+    const plan = planWith([
+      { address: functionAddress, actions: ['create'] },
+    ]);
+
+    expect(
+      findReconstructableDestructiveViolations(
+        plan,
+        protectedAddresses,
+        false,
+      ),
+    ).toEqual([]);
+  });
+
+  it('rejects a reconstructable deletion or replacement by default', () => {
+    const plan = planWith([
+      { address: functionAddress, actions: ['delete', 'create'] },
+    ]);
+
+    expect(
+      findReconstructableDestructiveViolations(
+        plan,
+        protectedAddresses,
+        false,
+      ),
+    ).toEqual([expect.stringContaining(functionAddress)]);
+  });
+
+  it('accepts an explicitly authorized reconstructable deletion or replacement', () => {
+    const plan = planWith([
+      { address: functionAddress, actions: ['delete', 'create'] },
+    ]);
+
+    expect(
+      findReconstructableDestructiveViolations(
+        plan,
+        protectedAddresses,
+        true,
+      ),
+    ).toEqual([]);
   });
 });
