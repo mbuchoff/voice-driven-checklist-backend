@@ -57,7 +57,7 @@ describe('GitHub Actions policy', () => {
     expect(configuration.on).toHaveProperty('pull_request');
     expect(planJob?.if).toContain('head.repo.full_name == github.repository');
     expect(planJob?.permissions).toMatchObject({ 'id-token': 'write' });
-    expect(runs(configuration)).toContain('tofu plan -lock=false');
+    expect(runs(configuration)).toMatch(/tofu .* plan -lock=false/);
     expect(runs(configuration)).not.toContain('tofu apply');
     expect(usedActions(configuration).join('\n')).not.toContain('upload-artifact');
   });
@@ -74,7 +74,7 @@ describe('GitHub Actions policy', () => {
     expect(commands).not.toContain('infra/aws/auth');
     expect(commands).not.toContain('infra/aws/bootstrap');
     expect(commands).toContain('check-infrastructure-policy.ts');
-    expect(commands).toContain('tofu apply');
+    expect(commands).toMatch(/tofu .* apply/);
   });
 
   it('retains the exact development artifact for the accepted 90-day window', async () => {

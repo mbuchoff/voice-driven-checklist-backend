@@ -1,0 +1,110 @@
+name: Infrastructure Plan
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/**
+      - infra/**
+      - package-lock.json
+      - package.json
+      - scripts/check-infrastructure-policy.ts
+      - src/deployment/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_PLUGIN_CACHE_DIR: /tmp/tofu-plugin-cache
+    steps:
+      - name: Check out candidate
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+      - name: Check out trusted policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: policy
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Install candidate and policy dependencies
+        shell: bash
+        run: |
+          npm --prefix candidate ci
+          if [[ -f policy/package-lock.json ]]; then
+            npm --prefix policy ci
+            echo "POLICY_ROOT=policy" >> "$GITHUB_ENV"
+          else
+            echo "POLICY_ROOT=candidate" >> "$GITHUB_ENV"
+          fi
+      - name: Build candidate artifact
+        working-directory: candidate
+        run: |
+          npm run build
+          mkdir -p dist/artifact
+          (cd dist/handler && zip -X -9 ../artifact/lambda.zip index.js)
+          echo "ARTIFACT_SHA256=$(sha256sum dist/artifact/lambda.zip | cut -d' ' -f1)" >> "$GITHUB_ENV"
+          echo "ARTIFACT_DIGEST=$(openssl dgst -sha256 -binary dist/artifact/lambda.zip | openssl base64 -A)" >> "$GITHUB_ENV"
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.5
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          role-session-name: pull-request-plan
+      - name: Plan authentication without mutation
+        shell: bash
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          for environment in development production; do
+            tofu -chdir=candidate/infra/aws/auth init -reconfigure -input=false \
+              -backend-config="environments/$environment.s3.tfbackend"
+            tofu -chdir=candidate/infra/aws/auth plan -lock=false -input=false \
+              -var-file="environments/$environment.tfvars" \
+              -out="/tmp/auth-$environment.tfplan" >/dev/null
+            tofu -chdir=candidate/infra/aws/auth show -json "/tmp/auth-$environment.tfplan" \
+              > "/tmp/auth-$environment.json"
+            "$POLICY_ROOT/node_modules/.bin/tsx" \
+              "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
+              "/tmp/auth-$environment.json" \
+              "$POLICY_ROOT/infra/policy/auth-$environment.json" \
+              candidate/infra/aws/auth
+          done
+      - name: Plan backend without mutation
+        shell: bash
+        run: |
+          for environment in development production; do
+            tofu -chdir=candidate/infra/aws/backend init -reconfigure -input=false \
+              -backend-config="environments/$environment.s3.tfbackend"
+            tofu -chdir=candidate/infra/aws/backend plan -lock=false -input=false \
+              -var-file="environments/$environment.tfvars" \
+              -var="artifact_path=${{ github.workspace }}/candidate/dist/artifact/lambda.zip" \
+              -var="artifact_digest=$ARTIFACT_DIGEST" \
+              -var="artifact_sha256=$ARTIFACT_SHA256" \
+              -var="commit_sha=${{ github.event.pull_request.head.sha }}" \
+              -var="deployment_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+              -var="permissions_boundary_arn=${{ vars.AWS_DEPLOYMENT_BOUNDARY_ARN }}" \
+              -out="/tmp/backend-$environment.tfplan" >/dev/null
+            tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
+              > "/tmp/backend-$environment.json"
+            "$POLICY_ROOT/node_modules/.bin/tsx" \
+              "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
+              "/tmp/backend-$environment.json" \
+              "$POLICY_ROOT/infra/policy/backend-$environment.json" \
+              candidate/infra/aws/backend
+          done

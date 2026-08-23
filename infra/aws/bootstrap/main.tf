@@ -16,12 +16,19 @@ locals {
     "${local.state_bucket_arn}/voice-checklist/backend/production.tfstate",
   ]
 
+  google_oauth_secret_arns = [
+    "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/development/deployment/google-oauth-*",
+    "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/production/deployment/google-oauth-*",
+  ]
+
   environment_state_objects = {
     development = [
       "${local.state_bucket_arn}/voice-checklist/backend/development.tfstate",
       "${local.state_bucket_arn}/voice-checklist/backend/development.tfstate.tflock",
     ]
     production = [
+      "${local.state_bucket_arn}/voice-checklist/auth/production.tfstate",
+      "${local.state_bucket_arn}/voice-checklist/auth/production.tfstate.tflock",
       "${local.state_bucket_arn}/voice-checklist/backend/production.tfstate",
       "${local.state_bucket_arn}/voice-checklist/backend/production.tfstate.tflock",
     ]
@@ -78,9 +85,6 @@ locals {
     "logs:Describe*",
     "logs:Get*",
     "logs:List*",
-    "secretsmanager:DescribeSecret",
-    "secretsmanager:GetSecretValue",
-    "secretsmanager:ListSecretVersionIds",
     "sqs:GetQueueAttributes",
     "sqs:List*",
     "sts:GetCallerIdentity",
@@ -181,6 +185,15 @@ resource "aws_iam_role_policy" "plan" {
       {
         Effect = "Allow"
         Action = [
+          "secretsmanager:DescribeSecret",
+          "secretsmanager:GetSecretValue",
+          "secretsmanager:ListSecretVersionIds",
+        ]
+        Resource = local.google_oauth_secret_arns
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "s3:GetObject",
           "s3:GetObjectVersion",
         ]
@@ -253,17 +266,14 @@ locals {
 
   environment_deploy_actions = [
     "apigateway:*",
-    "cognito-idp:Create*",
-    "cognito-idp:Describe*",
-    "cognito-idp:Get*",
-    "cognito-idp:List*",
-    "cognito-idp:Set*",
-    "cognito-idp:TagResource",
-    "cognito-idp:UntagResource",
-    "cognito-idp:Update*",
     "dynamodb:*",
     "lambda:*",
     "logs:*",
+    "sqs:*",
+    "sts:GetCallerIdentity",
+  ]
+
+  environment_secret_actions = [
     "secretsmanager:CreateSecret",
     "secretsmanager:DescribeSecret",
     "secretsmanager:GetSecretValue",
@@ -273,8 +283,17 @@ locals {
     "secretsmanager:TagResource",
     "secretsmanager:UntagResource",
     "secretsmanager:UpdateSecret",
-    "sqs:*",
-    "sts:GetCallerIdentity",
+  ]
+
+  production_cognito_actions = [
+    "cognito-idp:Create*",
+    "cognito-idp:Describe*",
+    "cognito-idp:Get*",
+    "cognito-idp:List*",
+    "cognito-idp:Set*",
+    "cognito-idp:TagResource",
+    "cognito-idp:UntagResource",
+    "cognito-idp:Update*",
   ]
 
   iam_runtime_actions = [
@@ -328,6 +347,21 @@ locals {
         }
       },
       {
+        Sid    = "ManageDevelopmentApplicationBuckets"
+        Effect = "Allow"
+        Action = "s3:*"
+        Resource = [
+          "arn:${local.partition}:s3:::voice-checklist-development-*",
+          "arn:${local.partition}:s3:::voice-checklist-development-*/*",
+        ]
+      },
+      {
+        Sid      = "ManageDevelopmentRuntimeSecrets"
+        Effect   = "Allow"
+        Action   = local.environment_secret_actions
+        Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/development/runtime/*"
+      },
+      {
         Sid      = "ReadWriteDevelopmentState"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
@@ -366,6 +400,18 @@ locals {
         Resource = "*"
       },
       {
+        Sid      = "ManageProductionAuthentication"
+        Effect   = "Allow"
+        Action   = local.production_cognito_actions
+        Resource = "arn:${local.partition}:cognito-idp:${var.aws_region}:${local.account_id}:userpool/*"
+      },
+      {
+        Sid      = "ReadProductionDeploymentSecret"
+        Effect   = "Allow"
+        Action   = local.environment_secret_actions
+        Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/production/deployment/google-oauth-*"
+      },
+      {
         Sid      = "ManageProductionRuntimeRoles"
         Effect   = "Allow"
         Action   = local.iam_runtime_actions
@@ -375,6 +421,21 @@ locals {
             "iam:PermissionsBoundary" = local.boundary_arn
           }
         }
+      },
+      {
+        Sid    = "ManageProductionApplicationBuckets"
+        Effect = "Allow"
+        Action = "s3:*"
+        Resource = [
+          "arn:${local.partition}:s3:::voice-checklist-production-*",
+          "arn:${local.partition}:s3:::voice-checklist-production-*/*",
+        ]
+      },
+      {
+        Sid      = "ManageProductionRuntimeSecrets"
+        Effect   = "Allow"
+        Action   = local.environment_secret_actions
+        Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/production/runtime/*"
       },
       {
         Sid      = "ReadWriteProductionState"
@@ -389,7 +450,10 @@ locals {
         Resource = local.state_bucket_arn
         Condition = {
           StringLike = {
-            "s3:prefix" = "voice-checklist/backend/production.tfstate*"
+            "s3:prefix" = [
+              "voice-checklist/auth/production.tfstate*",
+              "voice-checklist/backend/production.tfstate*",
+            ]
           }
         }
       },
