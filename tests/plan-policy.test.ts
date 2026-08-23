@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   findProtectedChangeViolations,
+  parsePolicyManifest,
   type OpenTofuPlan,
 } from '../src/deployment/plan-policy.js';
 
@@ -22,6 +23,12 @@ function planWith(
 }
 
 describe('protected OpenTofu plan policy', () => {
+  it('rejects malformed protected-resource manifests', () => {
+    expect(() => parsePolicyManifest({ planAddresses: [''] })).toThrowError(
+      /protected-resource manifest/i,
+    );
+  });
+
   it('accepts only no-op and in-place update actions for every protected address', () => {
     const plan = planWith([
       { address: userPoolAddress, actions: ['no-op'] },
