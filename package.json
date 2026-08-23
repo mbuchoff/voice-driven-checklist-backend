@@ -14,6 +14,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist', { force: true, recursive: true })\"",
     "contracts": "tsx scripts/generate-contracts.ts",
     "lint": "eslint .",
+    "package:artifact": "tsx scripts/package-artifact.ts",
     "test": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
@@ -28,6 +29,7 @@
     "@vitest/coverage-v8": "4.1.11",
     "esbuild": "0.28.2",
     "eslint": "10.9.0",
+    "fflate": "0.8.3",
     "tsx": "4.23.12",
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",
