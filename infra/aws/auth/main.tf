@@ -24,6 +24,9 @@ resource "aws_secretsmanager_secret" "google_oauth" {
   name                    = var.google_oauth_secret_name
   description             = "Google OAuth web credential for Voice Checklist ${var.environment} authentication"
   recovery_window_in_days = 30
+  tags = {
+    Repository = "mbuchoff/voice-driven-checklist-backend"
+  }
 
   lifecycle {
     destroy = false
@@ -63,7 +66,7 @@ resource "aws_cognito_identity_provider" "google" {
     attributes_url_add_attributes = "true"
     authorize_scopes              = "openid email profile"
     authorize_url                 = "https://accounts.google.com/o/oauth2/v2/auth"
-    client_id                     = local.google_oauth.client_id
+    client_id                     = nonsensitive(local.google_oauth.client_id)
     client_secret                 = local.google_oauth.client_secret
     oidc_issuer                   = "https://accounts.google.com"
     token_request_method          = "POST"
