@@ -1,0 +1,6 @@
+environment    = "development"
+deploy_runtime = true
+aws_region     = "us-east-1"
+
+# Supply artifact_path, artifact_digest, artifact_sha256, commit_sha,
+# deployment_url, and permissions_boundary_arn at deployment time.

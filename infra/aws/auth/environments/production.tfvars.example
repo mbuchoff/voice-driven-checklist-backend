@@ -1,0 +1,4 @@
+environment              = "production"
+aws_region               = "us-east-1"
+cognito_domain_prefix    = "voice-checklist-prod-replace-me"
+google_oauth_secret_name = "voice-checklist/production/deployment/google-oauth"

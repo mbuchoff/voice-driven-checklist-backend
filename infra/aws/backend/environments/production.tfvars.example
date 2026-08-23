@@ -1,0 +1,6 @@
+environment    = "production"
+deploy_runtime = false
+aws_region     = "us-east-1"
+
+# Supply artifact and provenance variables for planning. Production runtime
+# deployment remains intentionally absent until the first /v1 baseline.

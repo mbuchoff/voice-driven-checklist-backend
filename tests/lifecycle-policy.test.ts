@@ -24,6 +24,16 @@ afterEach(async () => {
 });
 
 describe('OpenTofu lifecycle policy', () => {
+  it('rejects a protected address that does not identify one resource block', async () => {
+    const directory = await configurationWith('');
+
+    await expect(
+      findLifecycleGuardViolations(directory, ['aws_cognito_user_pool']),
+    ).resolves.toEqual([
+      expect.stringContaining('aws_cognito_user_pool'),
+    ]);
+  });
+
   it('accepts an explicitly guarded protected resource', async () => {
     const directory = await configurationWith(`
       resource "aws_cognito_user_pool" "auth" {

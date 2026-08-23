@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export interface OpenTofuResourceChange {
   readonly address: string;
   readonly change: {
@@ -11,6 +13,61 @@ export interface OpenTofuPlan {
 }
 
 const allowedActionSets = new Set(['no-op', 'update']);
+
+const policyManifestSchema = z
+  .object({
+    environment: z.enum(['development', 'production']),
+    lifecycleBlocks: z.array(z.string().min(1)),
+    planAddresses: z.array(z.string().min(1)),
+    stack: z.enum(['auth', 'backend']),
+  })
+  .strict();
+
+const openTofuPlanSchema = z
+  .object({
+    resource_changes: z
+      .array(
+        z
+          .object({
+            address: z.string().min(1),
+            change: z
+              .object({
+                actions: z.array(z.string().min(1)),
+              })
+              .loose(),
+            mode: z.string().min(1),
+          })
+          .loose(),
+      )
+      .optional(),
+  })
+  .loose();
+
+export type PolicyManifest = z.infer<typeof policyManifestSchema>;
+
+export function parsePolicyManifest(value: unknown): PolicyManifest {
+  const result = policyManifestSchema.safeParse(value);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
+    throw new Error(`Invalid protected-resource manifest: ${details}`);
+  }
+
+  return result.data;
+}
+
+export function parseOpenTofuPlan(value: unknown): OpenTofuPlan {
+  const result = openTofuPlanSchema.safeParse(value);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`)
+      .join('; ');
+    throw new Error(`Invalid OpenTofu plan JSON: ${details}`);
+  }
+
+  return result.data;
+}
 
 export function findProtectedChangeViolations(
   plan: OpenTofuPlan,

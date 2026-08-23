@@ -4,11 +4,17 @@ mock_provider "aws" {
       account_id = "198771014193"
     }
   }
+
+  mock_data "aws_partition" {
+    defaults = {
+      partition = "aws"
+    }
+  }
 }
 
 variables {
   aws_region   = "us-east-1"
-  repository  = "mbuchoff/voice-driven-checklist-backend"
+  repository   = "mbuchoff/voice-driven-checklist-backend"
   state_bucket = "voice-checklist-tofu-state-use1-198771014193"
 }
 
@@ -29,7 +35,7 @@ run "github_oidc_contract" {
         aws_iam_role.github_plan,
         aws_iam_role.github_development_deploy,
         aws_iam_role.github_production_deploy,
-      ] : role.permissions_boundary == aws_iam_policy.deployment_boundary.arn
+      ] : role.permissions_boundary == "arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary"
     ])
     error_message = "Every GitHub role must carry the deployment permissions boundary."
   }

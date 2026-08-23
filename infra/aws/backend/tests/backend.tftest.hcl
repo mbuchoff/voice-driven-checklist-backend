@@ -1,12 +1,24 @@
-mock_provider "aws" {}
+mock_provider "aws" {
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "198771014193"
+    }
+  }
+
+  mock_data "aws_partition" {
+    defaults = {
+      partition = "aws"
+    }
+  }
+}
 
 variables {
-  artifact_digest = "ASNFZ4mrze8BI0VniavN7wJEn06J1JtAAAS01jL84Vg="
-  artifact_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  artifact_path   = "tests/fixtures/placeholder.zip"
-  aws_region      = "us-east-1"
-  commit_sha      = "0123456789abcdef0123456789abcdef01234567"
-  deployment_url  = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
+  artifact_digest          = "ASNFZ4mrze8BI0VniavN7wJEn06J1JtAAAS01jL84Vg="
+  artifact_sha256          = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  artifact_path            = "tests/fixtures/placeholder.zip"
+  aws_region               = "us-east-1"
+  commit_sha               = "0123456789abcdef0123456789abcdef01234567"
+  deployment_url           = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
   permissions_boundary_arn = "arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary"
 }
 

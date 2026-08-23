@@ -1,14 +1,15 @@
-mock_provider "aws" {
-  mock_data "aws_secretsmanager_secret_version" {
-    defaults = {
-      secret_string = "{\"client_id\":\"test-client.apps.googleusercontent.com\",\"client_secret\":\"test-secret\"}"
-    }
+mock_provider "aws" {}
+
+override_data {
+  target = data.aws_secretsmanager_secret_version.google_oauth
+  values = {
+    secret_string = "{\"client_id\":\"test-client.apps.googleusercontent.com\",\"client_secret\":\"test-secret\"}"
   }
 }
 
 variables {
-  aws_region            = "us-east-1"
-  cognito_domain_prefix = "voice-checklist-test"
+  aws_region               = "us-east-1"
+  cognito_domain_prefix    = "voice-checklist-test"
   google_oauth_secret_name = "voice-checklist/test/deployment/google-oauth"
 }
 
@@ -68,10 +69,10 @@ run "secret_contract" {
 
   assert {
     condition = (
-      aws_cognito_identity_provider.google.provider_details.client_id == "test-client.apps.googleusercontent.com" &&
-      aws_cognito_identity_provider.google.provider_details.client_secret == "test-secret"
+      jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string).client_id == "test-client.apps.googleusercontent.com" &&
+      jsondecode(data.aws_secretsmanager_secret_version.google_oauth.secret_string).client_secret == "test-secret"
     )
-    error_message = "Cognito must consume the current Google credential from AWS Secrets Manager."
+    error_message = "The deployment must retrieve the complete Google credential from AWS Secrets Manager."
   }
 }
 
