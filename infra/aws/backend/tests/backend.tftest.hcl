@@ -2,9 +2,12 @@ mock_provider "aws" {}
 
 variables {
   artifact_digest = "ASNFZ4mrze8BI0VniavN7wJEn06J1JtAAAS01jL84Vg="
+  artifact_sha256 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
   artifact_path   = "tests/fixtures/placeholder.zip"
   aws_region      = "us-east-1"
   commit_sha      = "0123456789abcdef0123456789abcdef01234567"
+  deployment_url  = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
+  permissions_boundary_arn = "arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary"
 }
 
 run "development_runtime_contract" {
@@ -20,7 +23,9 @@ run "development_runtime_contract" {
       length(aws_lambda_function.placeholder) == 1 &&
       one(aws_lambda_function.placeholder).runtime == "nodejs24.x" &&
       one(aws_lambda_function.placeholder).publish == true &&
-      toset(one(aws_lambda_function.placeholder).architectures) == toset(["arm64"])
+      toset(one(aws_lambda_function.placeholder).architectures) == toset(["arm64"]) &&
+      strcontains(one(aws_lambda_function.placeholder).description, var.commit_sha) &&
+      strcontains(one(aws_lambda_function.placeholder).description, var.deployment_url)
     )
     error_message = "Development must publish the harmless Node.js 24 ARM Lambda artifact."
   }
@@ -29,7 +34,8 @@ run "development_runtime_contract" {
     condition = (
       length(aws_lambda_alias.active) == 1 &&
       one(aws_lambda_alias.active).name == "active" &&
-      one(aws_lambda_alias.active).description == "commit 0123456789abcdef0123456789abcdef01234567"
+      strcontains(one(aws_lambda_alias.active).description, var.commit_sha) &&
+      strcontains(one(aws_lambda_alias.active).description, var.artifact_sha256)
     )
     error_message = "The active alias must identify the selected commit."
   }
