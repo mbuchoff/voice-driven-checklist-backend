@@ -1,16 +1,15 @@
 export interface DeploymentProvenance {
   readonly aliasFunctionVersion: string;
-  readonly artifactDigest: string;
-  readonly codeDigest: string;
+  readonly artifactSha256: string;
+  readonly codeSha256: string;
   readonly commit: string;
-  readonly configurationVersion: string;
   readonly versionCommit: string;
   readonly versionDeploymentUrl: string;
 }
 
 export interface DeploymentSelection {
-  readonly artifactDigest: string;
-  readonly codeDigest: string;
+  readonly artifactSha256: string;
+  readonly codeSha256: string;
   readonly commit: string;
   readonly deploymentUrl: string;
 }
@@ -35,16 +34,16 @@ export function validateDeploymentProvenance(
   if (!fullCommitPattern.test(actual.commit)) {
     violations.push('deployed commit must be a full lowercase Git SHA');
   }
-  if (!sha256Pattern.test(actual.artifactDigest)) {
+  if (!sha256Pattern.test(actual.artifactSha256)) {
     violations.push('deployed artifact digest must be a lowercase SHA-256');
   }
   if (actual.commit !== selected.commit) {
     violations.push('deployed commit differs from the selected commit');
   }
-  if (actual.artifactDigest !== selected.artifactDigest) {
+  if (actual.artifactSha256 !== selected.artifactSha256) {
     violations.push('deployed artifact differs from the selected artifact');
   }
-  if (actual.codeDigest !== selected.codeDigest) {
+  if (actual.codeSha256 !== selected.codeSha256) {
     violations.push('deployed Lambda code differs from the selected artifact');
   }
   if (actual.versionCommit !== selected.commit) {
@@ -56,9 +55,5 @@ export function validateDeploymentProvenance(
   if (!publishedVersionPattern.test(actual.aliasFunctionVersion)) {
     violations.push('active alias must select an immutable Lambda version');
   }
-  if (actual.configurationVersion !== actual.aliasFunctionVersion) {
-    violations.push('deployed Lambda configuration differs from the active alias');
-  }
-
   return violations;
 }

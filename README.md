@@ -60,8 +60,10 @@ bucket is a documented dependency and is not managed by any root. See
   assume a read-only OIDC role and generate real remote-state plans with
   `-lock=false`; forks receive no AWS credentials.
 - `main` automatically replaces development with its exact artifact.
-- A main-owned manual workflow accepts any trusted branch, tag, or full commit
-  and applies only `infra/aws/backend` to the shared development state.
+- A manual workflow dispatched from `main` accepts any owner-trusted branch,
+  tag, or full commit and applies only `infra/aws/backend` to the shared
+  development state. The saved candidate plan is checked after the main-owned
+  policy checkout.
 - Protected addresses must be present and have only no-op or in-place update
   actions. Persistent resources also require `lifecycle { destroy = false }`.
 - Reconstructable deletes or replacements require the workflow's explicit

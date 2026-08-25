@@ -14,7 +14,7 @@ All state is in AWS account `198771014193`, Region `us-east-1`, bucket
 | `voice-checklist/bootstrap.tfstate` | `infra/aws/bootstrap` | Local, manual, explicitly reviewed only |
 | `voice-checklist/auth/development.tfstate` | `infra/aws/auth` | Local migration/operator path; PR plans are read-only |
 | `voice-checklist/auth/production.tfstate` | `infra/aws/auth` | Protected production operator path; PR plans are read-only |
-| `voice-checklist/backend/development.tfstate` | `infra/aws/backend` | Automatic `main` or protected selected-ref workflow |
+| `voice-checklist/backend/development.tfstate` | `infra/aws/backend` | Automatic `main`, or owner/OIDC/policy-gated selected-ref workflow dispatched from `main` |
 | `voice-checklist/backend/production.tfstate` | `infra/aws/backend` | Reserved; no production runtime workflow |
 
 The bucket has versioning, server-side encryption, public-access blocking, and

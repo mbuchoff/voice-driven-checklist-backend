@@ -6,10 +6,10 @@
 repository and the repository owner approves its `infrastructure-plan`
 environment. The AWS role independently restricts assumption to that immutable
 owner ID. The workflow checks out the candidate separately from the current
-base branch's trusted policy implementation and manifests. The first
-repository-bootstrap PR falls back to its candidate policy because the minimal
-base predates the policy; after that merge, selected code cannot weaken the
-main-owned guard.
+`main` branch's trusted policy implementation and manifests. PR #1 alone falls
+back to its candidate policy because the minimal `main` branch predates the
+policy; every later pull request fails closed when `main` lacks the policy.
+Candidate build and plan commands finish before the trusted checkout occurs.
 
 The plan role can read only the four environment state objects, the two Google
 deployment secrets, and provider metadata needed for refresh. Plans use
@@ -19,9 +19,14 @@ accepted stack/environment or protected-address violation.
 ## Development deployment
 
 `deploy-development.yml` runs automatically for `main` and manually for a
-selected trusted ref. The workflow definition and policy come from `main`; the
-application artifact and backend configuration come from the selected commit.
-The workflow:
+selected trusted ref. Always dispatch the manual workflow from `main`; choose
+the deployed branch, tag, or commit with the `ref` input. The workflow
+definition and policy come from `main`; the application artifact and backend
+configuration come from the selected commit. A selected ref is trusted
+executable infrastructure code. Its saved plan is checked only after the
+main-owned policy checkout, while the AWS boundary independently denies
+persistent-resource deletion. The development environment has no reviewer gate
+so automatic `main` deployment is not blocked. The workflow:
 
 1. resolves the ref to a full 40-character commit;
 2. runs the complete Node test/build suite;

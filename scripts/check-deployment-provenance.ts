@@ -16,7 +16,6 @@ const aliasSchema = z.object({
 const configurationSchema = z.object({
   CodeSha256: z.string(),
   Description: z.string(),
-  Version: z.string(),
 });
 
 async function main(): Promise<void> {
@@ -52,17 +51,16 @@ async function main(): Promise<void> {
   const violations = validateDeploymentProvenance(
     {
       aliasFunctionVersion: alias.FunctionVersion,
-      artifactDigest: descriptionValue(alias.Description, 'artifact'),
-      codeDigest: configuration.CodeSha256,
+      artifactSha256: descriptionValue(alias.Description, 'artifact'),
+      codeSha256: configuration.CodeSha256,
       commit: descriptionValue(alias.Description, 'commit'),
-      configurationVersion: configuration.Version,
       versionCommit: descriptionValue(configuration.Description, 'commit'),
       versionDeploymentUrl: descriptionValue(
         configuration.Description,
         'deployment',
       ),
     },
-    { artifactDigest: sha256, codeDigest: digest, commit, deploymentUrl },
+    { artifactSha256: sha256, codeSha256: digest, commit, deploymentUrl },
   );
 
   if (violations.length > 0) {

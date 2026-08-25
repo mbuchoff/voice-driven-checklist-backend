@@ -37,19 +37,30 @@ describe('protected OpenTofu plan policy', () => {
     ).toThrow(/OpenTofu plan/i);
   });
 
-  it('parses a valid OpenTofu plan without discarding plan metadata', () => {
+  it('discards plan values outside the infrastructure policy contract', () => {
     const plan = {
       format_version: '1.2',
       resource_changes: [
         {
           address: userPoolAddress,
-          change: { actions: ['no-op'], before: {} },
+          change: {
+            actions: ['no-op'],
+            before: { client_secret: 'must-not-reach-policy-code' },
+          },
           mode: 'managed',
         },
       ],
     };
 
-    expect(parseOpenTofuPlan(plan)).toEqual(plan);
+    expect(parseOpenTofuPlan(plan)).toEqual({
+      resource_changes: [
+        {
+          address: userPoolAddress,
+          change: { actions: ['no-op'] },
+          mode: 'managed',
+        },
+      ],
+    });
   });
 
   it('fails closed when the plan has no resource changes', () => {

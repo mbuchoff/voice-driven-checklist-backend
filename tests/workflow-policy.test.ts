@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 const stepSchema = z
   .object({
     if: z.string().optional(),
+    name: z.string().optional(),
     run: z.string().optional(),
     uses: z.string().optional(),
     with: z.record(z.string(), z.unknown()).optional(),
@@ -67,21 +68,76 @@ describe('GitHub Actions policy', () => {
   it.each(['infrastructure-plan', 'deploy-development'])(
     'pipes every plan directly to the policy checker in %s',
     async (name) => {
-      const commands = runs(await workflow(name));
-      const lines = commands.split('\n');
-      const pipelines = lines
-        .map((line, index) => ({ index, line }))
-        .filter(({ line }) => line.includes(' show -json '))
-        .map(({ index }) => lines.slice(index, index + 8).join('\n'));
+      const configuration = await workflow(name);
+      const planSteps = Object.values(configuration.jobs)
+        .flatMap((job) => job.steps)
+        .filter((step) => step.run?.includes(' show -json '));
 
-      expect(pipelines).not.toEqual([]);
-      for (const pipeline of pipelines) {
-        expect(pipeline).toContain('check-infrastructure-policy.ts');
-        expect(pipeline).toMatch(/\n\s+- \\/);
-        expect(pipeline).not.toMatch(/\n\s*>\s/);
+      expect(planSteps).not.toEqual([]);
+      for (const step of planSteps) {
+        const pipelines = (step.run ?? '')
+          .replace(/\\\n\s*/g, ' ')
+          .split('\n')
+          .filter((line) => line.includes(' show -json '));
+
+        expect(pipelines).not.toEqual([]);
+        for (const pipeline of pipelines) {
+          expect(pipeline).toMatch(
+            /check-infrastructure-policy\.ts"?\s+-\s+/,
+          );
+          expect(pipeline).not.toMatch(/(?:^|\s)(?:>|tee)(?:\s|$)/);
+        }
       }
     },
   );
+
+  it.each(['infrastructure-plan', 'deploy-development'])(
+    'checks out and installs trusted policy only after candidate execution in %s',
+    async (name) => {
+      const configuration = await workflow(name);
+      const steps = Object.values(configuration.jobs).flatMap((job) => job.steps);
+      const policyCheckout = steps.findIndex((step) =>
+        step.name?.includes('trusted policy') ||
+        step.name?.includes('main-owned deployment policy'),
+      );
+      const policyInstall = steps.findIndex((step) =>
+        step.run?.includes('npm --prefix policy ci'),
+      );
+      const checker = steps.findIndex(
+        (step, index) =>
+          index > policyInstall &&
+          step.run?.includes('check-infrastructure-policy.ts'),
+      );
+      const lastCandidateExecution = steps.reduce(
+        (last, step, index) =>
+          step.run?.includes('npm --prefix candidate') ||
+          step.run?.includes('npm run build') ||
+          step.run?.match(/tofu -chdir=(?:candidate\/)?infra\/aws\/\S+ plan /)
+            ? index
+            : last,
+        -1,
+      );
+
+      expect(lastCandidateExecution).toBeGreaterThanOrEqual(0);
+      expect(policyCheckout).toBeGreaterThan(lastCandidateExecution);
+      expect(policyInstall).toBeGreaterThan(policyCheckout);
+      expect(checker).toBeGreaterThan(policyInstall);
+    },
+  );
+
+  it('pins speculative plan policy to main with a PR-1-only bootstrap fallback', async () => {
+    const configuration = await workflow('infrastructure-plan');
+    const policyCheckout = configuration.jobs.plan?.steps.find((step) =>
+      step.name?.includes('trusted policy'),
+    );
+    const policyInstall = configuration.jobs.plan?.steps.find((step) =>
+      step.run?.includes('POLICY_ROOT'),
+    );
+
+    expect(policyCheckout?.with?.ref).toBe('main');
+    expect(policyInstall?.run).toMatch(/pull_request\.number.*==.*1/);
+    expect(policyInstall?.run).toContain('exit 1');
+  });
 
   it('runs a speculative infrastructure plan for every pull request', async () => {
     const configuration = await workflow('infrastructure-plan');
@@ -106,10 +162,14 @@ describe('GitHub Actions policy', () => {
 
   it('requires an explicit manual input before deleting reconstructable resources', async () => {
     const configuration = await workflow('deploy-development');
-    const commands = runs(configuration);
+    const guardedPlan = configuration.jobs.deploy?.steps.find((step) =>
+      step.run?.includes('allow_reconstructable_destroy'),
+    );
 
-    expect(commands).toContain('inputs.allow_reconstructable_destroy');
-    expect(commands).not.toContain('github.event_name');
+    expect(guardedPlan?.run).toContain('inputs.allow_reconstructable_destroy');
+    expect(guardedPlan?.run).toContain(
+      'override+=(--allow-reconstructable-destroy)',
+    );
   });
 
   it('closes a GitHub Deployment when a run is cancelled', async () => {

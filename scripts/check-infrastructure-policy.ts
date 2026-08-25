@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { text } from 'node:stream/consumers';
 
 import { findInfrastructurePolicyViolations } from '../src/deployment/infrastructure-policy.js';
 import {
@@ -8,19 +9,10 @@ import {
 } from '../src/deployment/plan-policy.js';
 
 async function readJson(path: string): Promise<unknown> {
-  let source: string;
-  if (path === '-') {
-    process.stdin.setEncoding('utf8');
-    source = '';
-    for await (const chunk of process.stdin as AsyncIterable<unknown>) {
-      if (typeof chunk !== 'string') {
-        throw new Error('Infrastructure plan input must be UTF-8 text.');
-      }
-      source += chunk;
-    }
-  } else {
-    source = await readFile(resolve(path), 'utf8');
-  }
+  const source =
+    path === '-'
+      ? await text(process.stdin)
+      : await readFile(resolve(path), 'utf8');
 
   return JSON.parse(source) as unknown;
 }
@@ -47,7 +39,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const manifest = parsePolicyManifest(await readJson(resolve(manifestPath)));
+  const manifest = parsePolicyManifest(await readJson(manifestPath));
   const plan = parseOpenTofuPlan(await readJson(planPath));
   const violations = await findInfrastructurePolicyViolations(
     plan,

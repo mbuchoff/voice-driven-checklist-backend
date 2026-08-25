@@ -27,25 +27,11 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           path: candidate
-      - name: Check out trusted policy
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.base.ref }}
-          path: policy
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
-      - name: Install candidate and policy dependencies
-        shell: bash
-        run: |
-          npm --prefix candidate ci
-          if [[ -d policy/infra/policy && -f policy/scripts/check-infrastructure-policy.ts ]]; then
-            npm --prefix policy ci
-            echo "POLICY_ROOT=policy" >> "$GITHUB_ENV"
-          else
-            echo "::warning::The base branch has no infrastructure policy yet; this bootstrap PR is validating against its candidate policy."
-            echo "POLICY_ROOT=candidate" >> "$GITHUB_ENV"
-          fi
+      - name: Install candidate dependencies
+        run: npm --prefix candidate ci
       - name: Build candidate artifact
         working-directory: candidate
         run: |
@@ -61,7 +47,7 @@ jobs:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::198771014193:role/voice-checklist-github-plan
           role-session-name: pull-request-plan
-      - name: Plan authentication without mutation
+      - name: Save authentication plans without mutation
         shell: bash
         run: |
           mkdir -p "$TF_PLUGIN_CACHE_DIR"
@@ -71,14 +57,8 @@ jobs:
             tofu -chdir=candidate/infra/aws/auth plan -lock=false -input=false \
               -var-file="environments/$environment.tfvars" \
               -out="/tmp/auth-$environment.tfplan" >/dev/null
-            tofu -chdir=candidate/infra/aws/auth show -json "/tmp/auth-$environment.tfplan" \
-              | "$POLICY_ROOT/node_modules/.bin/tsx" \
-              "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
-              - \
-              "$POLICY_ROOT/infra/policy/auth-$environment.json" \
-              candidate/infra/aws/auth
           done
-      - name: Plan backend without mutation
+      - name: Save backend plans without mutation
         shell: bash
         run: |
           for environment in development production; do
@@ -93,6 +73,40 @@ jobs:
               -var="deployment_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
               -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-$environment-runtime-boundary" \
               -out="/tmp/backend-$environment.tfplan" >/dev/null
+          done
+      - name: Check out trusted policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: policy
+      - name: Install trusted policy dependencies
+        shell: bash
+        run: |
+          if [[ -d policy/infra/policy && -f policy/scripts/check-infrastructure-policy.ts ]]; then
+            npm --prefix policy ci
+            echo "POLICY_ROOT=policy" >> "$GITHUB_ENV"
+          elif [[ "${{ github.event.pull_request.number }}" == "1" ]]; then
+            echo "::warning::PR #1 predates the main-owned infrastructure policy; validating this one bootstrap PR against its candidate policy."
+            echo "POLICY_ROOT=candidate" >> "$GITHUB_ENV"
+          else
+            echo "The main branch has no infrastructure policy; refusing candidate-owned validation." >&2
+            exit 1
+          fi
+      - name: Check authentication plans
+        shell: bash
+        run: |
+          for environment in development production; do
+            tofu -chdir=candidate/infra/aws/auth show -json "/tmp/auth-$environment.tfplan" \
+              | "$POLICY_ROOT/node_modules/.bin/tsx" \
+              "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
+              - \
+              "$POLICY_ROOT/infra/policy/auth-$environment.json" \
+              candidate/infra/aws/auth
+          done
+      - name: Check backend plans
+        shell: bash
+        run: |
+          for environment in development production; do
             tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
               | "$POLICY_ROOT/node_modules/.bin/tsx" \
               "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \

@@ -33,15 +33,12 @@ const openTofuPlanSchema = z
             change: z
               .object({
                 actions: z.array(z.string().min(1)),
-              })
-              .loose(),
+              }),
             mode: z.string().min(1),
-          })
-          .loose(),
+          }),
       )
       .optional(),
-  })
-  .loose();
+  });
 
 export type PolicyManifest = z.infer<typeof policyManifestSchema>;
 
