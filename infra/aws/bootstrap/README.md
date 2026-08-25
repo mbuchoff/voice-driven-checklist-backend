@@ -1,8 +1,9 @@
 # AWS bootstrap
 
 This manual-only root creates the GitHub OIDC provider, read-only plan role,
-environment deployment roles, and shared permissions boundary. No GitHub
-workflow is authorized to apply its state or modify these roles.
+environment deployment roles, a deployment permissions boundary, and
+environment-scoped runtime boundaries. No GitHub workflow is authorized to
+apply its state or modify these roles.
 
 The trust policies include GitHub's immutable owner and repository IDs in each
 OIDC subject. Update both the names and IDs in `bootstrap.tfvars` if ownership
@@ -32,8 +33,9 @@ tofu plan -input=false \
 Review every action and obtain explicit approval before applying. The expected
 steady-state plan is no-op.
 
-The boundary allows only permissions granted by a role and independently denies
-persistent-data deletion plus mutation of GitHub roles and the boundary itself.
-Development branch credentials cannot manage Cognito or read deployment
-credentials. Production Cognito deletion is denied both by its inline role
-policy and the boundary.
+The deployment boundary allows only permissions granted by a role and
+independently denies persistent-data deletion plus mutation of GitHub roles and
+the boundary itself. Runtime boundaries permit only the exact services each
+environment's Lambda code needs. Development branch credentials cannot manage
+production resources, Cognito, or deployment credentials. Production Cognito
+deletion is denied both by its inline role policy and the deployment boundary.

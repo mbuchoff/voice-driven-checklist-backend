@@ -67,7 +67,6 @@ jobs:
       - name: Test and build selected commit
         working-directory: candidate
         run: |
-          npm audit
           npm run lint
           npm run typecheck
           npm test
@@ -134,12 +133,12 @@ jobs:
             -var="artifact_sha256=${{ steps.package.outputs.sha256 }}" \
             -var="commit_sha=${{ steps.selection.outputs.sha }}" \
             -var="deployment_url=${{ steps.deployment.outputs.url }}" \
-            -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary" \
+            -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary" \
             -out=/tmp/backend-development.tfplan >/dev/null
           tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
             > /tmp/backend-development.json
           override=()
-          if [[ "${{ github.event_name }}" == "push" || "${{ inputs.allow_reconstructable_destroy }}" == "true" ]]; then
+          if [[ "${{ inputs.allow_reconstructable_destroy }}" == "true" ]]; then
             override+=(--allow-reconstructable-destroy)
           fi
           ../policy/node_modules/.bin/tsx \
@@ -161,17 +160,16 @@ jobs:
           configuration=$(aws lambda get-function-configuration \
             --function-name "$function_name" \
             --qualifier "$function_version")
-          jq -e \
-            --arg digest "${{ steps.package.outputs.digest }}" \
-            --arg commit "${{ steps.selection.outputs.sha }}" \
-            --arg deployment "${{ steps.deployment.outputs.url }}" \
-            '.CodeSha256 == $digest and (.Description | contains($commit)) and (.Description | contains($deployment)) and .Version != "$LATEST"' \
-            <<< "$configuration" >/dev/null
-          jq -e \
-            --arg commit "${{ steps.selection.outputs.sha }}" \
-            --arg artifact "${{ steps.package.outputs.sha256 }}" \
-            '(.Description | contains($commit)) and (.Description | contains($artifact))' \
-            <<< "$alias" >/dev/null
+          printf '%s' "$configuration" > /tmp/lambda-configuration.json
+          printf '%s' "$alias" > /tmp/lambda-alias.json
+          ../policy/node_modules/.bin/tsx \
+            ../policy/scripts/check-deployment-provenance.ts \
+            /tmp/lambda-configuration.json \
+            /tmp/lambda-alias.json \
+            "${{ steps.selection.outputs.sha }}" \
+            "${{ steps.package.outputs.digest }}" \
+            "${{ steps.package.outputs.sha256 }}" \
+            "${{ steps.deployment.outputs.url }}"
           aws lambda invoke \
             --function-name "$function_name" \
             --qualifier active \

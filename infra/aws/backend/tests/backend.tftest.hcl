@@ -19,7 +19,7 @@ variables {
   aws_region               = "us-east-1"
   commit_sha               = "0123456789abcdef0123456789abcdef01234567"
   deployment_url           = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
-  permissions_boundary_arn = "arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary"
+  permissions_boundary_arn = "arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary"
 }
 
 run "development_runtime_contract" {

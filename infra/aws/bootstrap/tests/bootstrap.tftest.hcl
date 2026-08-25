@@ -48,7 +48,7 @@ run "repository_trust_contract" {
 
   assert {
     condition = (
-      strcontains(aws_iam_role.github_plan.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:pull_request") &&
+      strcontains(aws_iam_role.github_plan.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:environment:infrastructure-plan") &&
       strcontains(aws_iam_role.github_development_deploy.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:environment:development") &&
       strcontains(aws_iam_role.github_production_deploy.assume_role_policy, "repo:mbuchoff@13501758/voice-driven-checklist-backend@1344113852:environment:production")
     )
@@ -58,9 +58,20 @@ run "repository_trust_contract" {
   assert {
     condition = alltrue([
       for role in [
+        aws_iam_role.github_plan,
         aws_iam_role.github_development_deploy,
         aws_iam_role.github_production_deploy,
-      ] : (
+      ] : strcontains(role.assume_role_policy, "token.actions.githubusercontent.com:actor_id")
+    ])
+    error_message = "GitHub roles must be assumable only by the repository owner."
+  }
+
+  assert {
+    condition = alltrue([
+      for role in [
+        aws_iam_role.github_development_deploy,
+        aws_iam_role.github_production_deploy,
+        ] : (
         strcontains(role.assume_role_policy, "token.actions.githubusercontent.com:ref") &&
         strcontains(role.assume_role_policy, "refs/heads/main") &&
         strcontains(role.assume_role_policy, "token.actions.githubusercontent.com:repository_id") &&
@@ -108,7 +119,7 @@ run "environment_isolation_contract" {
     condition = anytrue([
       for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
       statement.Sid == "CreateDevelopmentRuntimeRoles" &&
-      try(statement.Condition.StringEquals["iam:PermissionsBoundary"], "") == aws_iam_policy.runtime_boundary["development"].arn
+      try(statement.Condition.StringEquals["iam:PermissionsBoundary"], "") == "arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary"
     ])
     error_message = "Development runtime roles must be created with the exact least-privilege runtime boundary."
   }
@@ -140,7 +151,7 @@ run "state_object_retention_contract" {
       for policy in [
         aws_iam_role_policy.development_deploy.policy,
         aws_iam_role_policy.production_deploy.policy,
-      ] : [
+        ] : [
         for statement in jsondecode(policy).Statement :
         !strcontains(jsonencode(statement.Action), "s3:DeleteObject") ||
         alltrue([

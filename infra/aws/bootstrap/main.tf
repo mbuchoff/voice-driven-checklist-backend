@@ -5,10 +5,18 @@ locals {
   repository_parts   = split("/", var.repository)
   repository_subject = "${local.repository_parts[0]}@${var.repository_owner_id}/${local.repository_parts[1]}@${var.repository_id}"
 
-  account_id          = data.aws_caller_identity.current.account_id
-  partition           = data.aws_partition.current.partition
-  boundary_name       = "voice-checklist-github-deployment-boundary"
-  boundary_arn        = "arn:${local.partition}:iam::${local.account_id}:policy/${local.boundary_name}"
+  account_id    = data.aws_caller_identity.current.account_id
+  partition     = data.aws_partition.current.partition
+  boundary_name = "voice-checklist-github-deployment-boundary"
+  boundary_arn  = "arn:${local.partition}:iam::${local.account_id}:policy/${local.boundary_name}"
+  runtime_boundary_names = {
+    development = "voice-checklist-development-runtime-boundary"
+    production  = "voice-checklist-production-runtime-boundary"
+  }
+  runtime_boundary_arns = {
+    for environment, name in local.runtime_boundary_names :
+    environment => "arn:${local.partition}:iam::${local.account_id}:policy/${name}"
+  }
   github_provider_arn = "arn:${local.partition}:iam::${local.account_id}:oidc-provider/token.actions.githubusercontent.com"
   state_bucket_arn    = "arn:${local.partition}:s3:::${var.state_bucket}"
 
@@ -27,12 +35,19 @@ locals {
   environment_state_objects = {
     development = [
       "${local.state_bucket_arn}/voice-checklist/backend/development.tfstate",
-      "${local.state_bucket_arn}/voice-checklist/backend/development.tfstate.tflock",
     ]
     production = [
       "${local.state_bucket_arn}/voice-checklist/auth/production.tfstate",
-      "${local.state_bucket_arn}/voice-checklist/auth/production.tfstate.tflock",
       "${local.state_bucket_arn}/voice-checklist/backend/production.tfstate",
+    ]
+  }
+
+  environment_lock_objects = {
+    development = [
+      "${local.state_bucket_arn}/voice-checklist/backend/development.tfstate.tflock",
+    ]
+    production = [
+      "${local.state_bucket_arn}/voice-checklist/auth/production.tfstate.tflock",
       "${local.state_bucket_arn}/voice-checklist/backend/production.tfstate.tflock",
     ]
   }
@@ -49,6 +64,7 @@ locals {
     "kms:DisableKey",
     "kms:ScheduleKeyDeletion",
     "logs:DeleteLogGroup",
+    "logs:DeleteLogStream",
     "rds:DeleteDBCluster",
     "rds:DeleteDBInstance",
     "secretsmanager:DeleteSecret",
@@ -75,12 +91,9 @@ locals {
   ]
 
   plan_permissions = [
-    "apigateway:GET",
     "cognito-idp:Describe*",
     "cognito-idp:Get*",
     "cognito-idp:List*",
-    "dynamodb:Describe*",
-    "dynamodb:List*",
     "iam:Get*",
     "iam:List*",
     "lambda:Get*",
@@ -88,8 +101,6 @@ locals {
     "logs:Describe*",
     "logs:Get*",
     "logs:List*",
-    "sqs:GetQueueAttributes",
-    "sqs:List*",
     "sts:GetCallerIdentity",
   ]
 }
@@ -151,6 +162,27 @@ resource "aws_iam_policy" "deployment_boundary" {
   })
 }
 
+resource "aws_iam_policy" "runtime_boundary" {
+  for_each = local.runtime_boundary_names
+
+  name        = each.value
+  description = "Maximum permissions for Voice Checklist ${each.key} runtime roles"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "WriteEnvironmentLambdaLogs"
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+        ]
+        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-${each.key}-*:log-stream:*"
+      },
+    ]
+  })
+}
+
 resource "aws_iam_role" "github_plan" {
   name                 = "voice-checklist-github-plan"
   permissions_boundary = local.boundary_arn
@@ -164,8 +196,12 @@ resource "aws_iam_role" "github_plan" {
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:pull_request"
+          "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:infrastructure-plan"
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
+          "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:workflow"            = "Infrastructure Plan"
         }
       }
     }]
@@ -244,8 +280,12 @@ locals {
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:environment:development"
+          "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:development"
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:ref"                 = "refs/heads/main"
+          "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
+          "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
         }
       }
     }]
@@ -261,32 +301,27 @@ locals {
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = {
-          "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          "token.actions.githubusercontent.com:sub" = "repo:${local.repository_subject}:environment:production"
+          "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
+          "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:production"
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:ref"                 = "refs/heads/main"
+          "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
+          "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
         }
       }
     }]
   })
 
-  environment_deploy_actions = [
-    "apigateway:*",
-    "dynamodb:*",
-    "lambda:*",
-    "logs:*",
-    "sqs:*",
+  environment_read_actions = [
+    "logs:DescribeLogGroups",
     "sts:GetCallerIdentity",
   ]
 
-  environment_secret_actions = [
-    "secretsmanager:CreateSecret",
+  deployment_secret_read_actions = [
     "secretsmanager:DescribeSecret",
+    "secretsmanager:GetResourcePolicy",
     "secretsmanager:GetSecretValue",
     "secretsmanager:ListSecretVersionIds",
-    "secretsmanager:PutSecretValue",
-    "secretsmanager:RestoreSecret",
-    "secretsmanager:TagResource",
-    "secretsmanager:UntagResource",
-    "secretsmanager:UpdateSecret",
   ]
 
   production_cognito_actions = [
@@ -300,14 +335,12 @@ locals {
     "cognito-idp:Update*",
   ]
 
-  iam_runtime_actions = [
-    "iam:CreateRole",
+  iam_runtime_role_actions = [
     "iam:DeleteRole",
     "iam:DeleteRolePolicy",
     "iam:GetRole",
     "iam:GetRolePolicy",
     "iam:ListRolePolicies",
-    "iam:PassRole",
     "iam:PutRolePolicy",
     "iam:TagRole",
     "iam:UntagRole",
@@ -334,42 +367,73 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "ManageDevelopmentBackend"
+        Sid      = "ReadDevelopmentBackend"
         Effect   = "Allow"
-        Action   = local.environment_deploy_actions
+        Action   = local.environment_read_actions
         Resource = "*"
       },
       {
-        Sid      = "ManageDevelopmentRuntimeRoles"
+        Sid      = "ManageDevelopmentBackend"
         Effect   = "Allow"
-        Action   = local.iam_runtime_actions
+        Action   = "lambda:*"
+        Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-development-*"
+      },
+      {
+        Sid      = "ManageDevelopmentLogs"
+        Effect   = "Allow"
+        Action   = "logs:*"
+        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*:*"
+      },
+      {
+        Sid      = "CreateDevelopmentRuntimeRoles"
+        Effect   = "Allow"
+        Action   = "iam:CreateRole"
         Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-development-*"
         Condition = {
-          StringEqualsIfExists = {
-            "iam:PermissionsBoundary" = local.boundary_arn
+          StringEquals = {
+            "iam:PermissionsBoundary" = local.runtime_boundary_arns.development
           }
         }
       },
       {
-        Sid    = "ManageDevelopmentApplicationBuckets"
-        Effect = "Allow"
-        Action = "s3:*"
-        Resource = [
-          "arn:${local.partition}:s3:::voice-checklist-development-*",
-          "arn:${local.partition}:s3:::voice-checklist-development-*/*",
-        ]
+        Sid      = "ManageDevelopmentRuntimeRoles"
+        Effect   = "Allow"
+        Action   = local.iam_runtime_role_actions
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-development-*"
       },
       {
-        Sid      = "ManageDevelopmentRuntimeSecrets"
+        Sid      = "SetDevelopmentRuntimeBoundary"
         Effect   = "Allow"
-        Action   = local.environment_secret_actions
-        Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/development/runtime/*"
+        Action   = "iam:PutRolePermissionsBoundary"
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-development-*"
+        Condition = {
+          StringEquals = {
+            "iam:PermissionsBoundary" = local.runtime_boundary_arns.development
+          }
+        }
+      },
+      {
+        Sid      = "PassDevelopmentRuntimeRoles"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-development-*"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "lambda.amazonaws.com"
+          }
+        }
       },
       {
         Sid      = "ReadWriteDevelopmentState"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:PutObject"]
         Resource = local.environment_state_objects.development
+      },
+      {
+        Sid      = "DeleteDevelopmentStateLocks"
+        Effect   = "Allow"
+        Action   = "s3:DeleteObject"
+        Resource = local.environment_lock_objects.development
       },
       {
         Sid      = "ListStateBucket"
@@ -389,10 +453,22 @@ locals {
     Version = "2012-10-17"
     Statement = [
       {
+        Sid      = "ReadProductionBackend"
+        Effect   = "Allow"
+        Action   = local.environment_read_actions
+        Resource = "*"
+      },
+      {
         Sid      = "ManageProductionBackend"
         Effect   = "Allow"
-        Action   = local.environment_deploy_actions
-        Resource = "*"
+        Action   = "lambda:*"
+        Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-production-*"
+      },
+      {
+        Sid      = "ManageProductionLogs"
+        Effect   = "Allow"
+        Action   = "logs:*"
+        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-production-*:*"
       },
       {
         Sid    = "DenyCognitoDeletion"
@@ -412,40 +488,59 @@ locals {
       {
         Sid      = "ReadProductionDeploymentSecret"
         Effect   = "Allow"
-        Action   = local.environment_secret_actions
+        Action   = local.deployment_secret_read_actions
         Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/production/deployment/google-oauth-*"
       },
       {
-        Sid      = "ManageProductionRuntimeRoles"
+        Sid      = "CreateProductionRuntimeRoles"
         Effect   = "Allow"
-        Action   = local.iam_runtime_actions
+        Action   = "iam:CreateRole"
         Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-production-*"
         Condition = {
-          StringEqualsIfExists = {
-            "iam:PermissionsBoundary" = local.boundary_arn
+          StringEquals = {
+            "iam:PermissionsBoundary" = local.runtime_boundary_arns.production
           }
         }
       },
       {
-        Sid    = "ManageProductionApplicationBuckets"
-        Effect = "Allow"
-        Action = "s3:*"
-        Resource = [
-          "arn:${local.partition}:s3:::voice-checklist-production-*",
-          "arn:${local.partition}:s3:::voice-checklist-production-*/*",
-        ]
+        Sid      = "ManageProductionRuntimeRoles"
+        Effect   = "Allow"
+        Action   = local.iam_runtime_role_actions
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-production-*"
       },
       {
-        Sid      = "ManageProductionRuntimeSecrets"
+        Sid      = "SetProductionRuntimeBoundary"
         Effect   = "Allow"
-        Action   = local.environment_secret_actions
-        Resource = "arn:${local.partition}:secretsmanager:${var.aws_region}:${local.account_id}:secret:voice-checklist/production/runtime/*"
+        Action   = "iam:PutRolePermissionsBoundary"
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-production-*"
+        Condition = {
+          StringEquals = {
+            "iam:PermissionsBoundary" = local.runtime_boundary_arns.production
+          }
+        }
+      },
+      {
+        Sid      = "PassProductionRuntimeRoles"
+        Effect   = "Allow"
+        Action   = "iam:PassRole"
+        Resource = "arn:${local.partition}:iam::${local.account_id}:role/voice-checklist-production-*"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "lambda.amazonaws.com"
+          }
+        }
       },
       {
         Sid      = "ReadWriteProductionState"
         Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+        Action   = ["s3:GetObject", "s3:PutObject"]
         Resource = local.environment_state_objects.production
+      },
+      {
+        Sid      = "DeleteProductionStateLocks"
+        Effect   = "Allow"
+        Action   = "s3:DeleteObject"
+        Resource = local.environment_lock_objects.production
       },
       {
         Sid      = "ListStateBucket"

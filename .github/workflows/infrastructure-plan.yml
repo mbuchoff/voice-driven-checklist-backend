@@ -21,6 +21,7 @@ jobs:
   plan:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
+    environment: infrastructure-plan
     permissions:
       contents: read
       id-token: write
@@ -36,7 +37,7 @@ jobs:
       - name: Check out trusted policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ github.event.pull_request.base.ref }}
           path: policy
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
@@ -45,10 +46,11 @@ jobs:
         shell: bash
         run: |
           npm --prefix candidate ci
-          if [[ -f policy/package-lock.json ]]; then
+          if [[ -d policy/infra/policy && -f policy/scripts/check-infrastructure-policy.ts ]]; then
             npm --prefix policy ci
             echo "POLICY_ROOT=policy" >> "$GITHUB_ENV"
           else
+            echo "::warning::The base branch has no infrastructure policy yet; this bootstrap PR is validating against its candidate policy."
             echo "POLICY_ROOT=candidate" >> "$GITHUB_ENV"
           fi
       - name: Build candidate artifact
@@ -97,7 +99,7 @@ jobs:
               -var="artifact_sha256=$ARTIFACT_SHA256" \
               -var="commit_sha=${{ github.event.pull_request.head.sha }}" \
               -var="deployment_url=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-              -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-github-deployment-boundary" \
+              -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-$environment-runtime-boundary" \
               -out="/tmp/backend-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
               > "/tmp/backend-$environment.json"

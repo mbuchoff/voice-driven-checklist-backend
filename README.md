@@ -43,7 +43,7 @@ done
 
 | Root | State key | Purpose |
 | --- | --- | --- |
-| `infra/aws/bootstrap` | `voice-checklist/bootstrap.tfstate` | Manual-only GitHub OIDC, roles, and permissions boundary |
+| `infra/aws/bootstrap` | `voice-checklist/bootstrap.tfstate` | Manual-only GitHub OIDC, roles, and permissions boundaries |
 | `infra/aws/auth` development | `voice-checklist/auth/development.tfstate` | Existing development Cognito and Google credential metadata |
 | `infra/aws/auth` production | `voice-checklist/auth/production.tfstate` | Existing production Cognito and Google credential metadata |
 | `infra/aws/backend` development | `voice-checklist/backend/development.tfstate` | Development compute, roles, and logs |

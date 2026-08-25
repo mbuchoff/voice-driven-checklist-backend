@@ -3,10 +3,13 @@
 ## Pull-request plans
 
 `infrastructure-plan.yml` runs only when the pull request head belongs to this
-repository. It checks out the candidate separately from the base branch's
-trusted policy implementation and manifests. The first repository-bootstrap PR
-falls back to its candidate policy because the minimal base predates the policy;
-after that merge, selected code cannot weaken the main-owned guard.
+repository and the repository owner approves its `infrastructure-plan`
+environment. The AWS role independently restricts assumption to that immutable
+owner ID. The workflow checks out the candidate separately from the current
+base branch's trusted policy implementation and manifests. The first
+repository-bootstrap PR falls back to its candidate policy because the minimal
+base predates the policy; after that merge, selected code cannot weaken the
+main-owned guard.
 
 The plan role can read only the four environment state objects, the two Google
 deployment secrets, and provider metadata needed for refresh. Plans use
@@ -43,19 +46,16 @@ always fail once an address is in the main manifest. The deployment permissions
 boundary also denies deletion of Cognito, tables, queues, Secrets Manager
 secrets, log groups, KMS keys, databases, and environment-prefixed S3 data.
 
-Reconstructable compute or configuration can be deleted or replaced only when:
-
-- a `main` push already passed pull-request review; or
-- a manual selected-ref run explicitly enables
-  `allow_reconstructable_destroy`.
+Reconstructable compute or configuration can be deleted or replaced only when
+a manual selected-ref run explicitly enables `allow_reconstructable_destroy`.
 
 ## Rollback
 
 Before the first production `/v1` release, rollback evidence is limited to
 development Lambda versions because this issue creates no production Lambda.
-To roll back development, select a previously verified Git commit and redeploy
-its retained artifact through the main-owned workflow. Never move the alias to
-an unverified version by hand.
+To roll back development, select a previously verified Git commit and rebuild
+its artifact deterministically through the main-owned workflow. Never move the
+alias to an unverified version by hand.
 
 GitHub Actions artifacts expire after 90 days. An expired artifact is not a
 promotion candidate: rebuild from the selected commit, deploy it to development,

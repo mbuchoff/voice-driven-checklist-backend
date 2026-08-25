@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 
 export interface ApiContract {
   readonly method: 'delete' | 'get' | 'patch' | 'post' | 'put';
@@ -15,6 +15,11 @@ export interface EventContract {
 export const apiContracts: readonly ApiContract[] = [];
 export const eventContracts: Readonly<Record<string, EventContract>> = {};
 
+interface ContractCatalog {
+  readonly apiContracts: readonly ApiContract[];
+  readonly eventContracts: Readonly<Record<string, EventContract>>;
+}
+
 interface OpenApiDocument {
   readonly components: { readonly schemas: Record<string, unknown> };
   readonly info: { readonly title: string; readonly version: string };
@@ -27,13 +32,20 @@ interface EventDocument {
   readonly schemaVersion: '1.0.0';
 }
 
-export function buildContractDocuments(): {
+export function buildContractDocuments(
+  catalog: ContractCatalog = { apiContracts, eventContracts },
+): {
   readonly events: EventDocument;
   readonly openapi: OpenApiDocument;
 } {
   return {
     events: {
-      events: {},
+      events: Object.fromEntries(
+        Object.entries(catalog.eventContracts).map(([name, contract]) => [
+          name,
+          z.toJSONSchema(contract.schema, { target: 'draft-2020-12' }),
+        ]),
+      ),
       schemaVersion: '1.0.0',
     },
     openapi: {
@@ -43,7 +55,41 @@ export function buildContractDocuments(): {
         version: '0.0.0',
       },
       openapi: '3.1.0',
-      paths: {},
+      paths: Object.fromEntries(
+        catalog.apiContracts.map((contract) => [
+          contract.path,
+          {
+            [contract.method]: {
+              ...(contract.request === undefined
+                ? {}
+                : {
+                    requestBody: {
+                      content: {
+                        'application/json': {
+                          schema: z.toJSONSchema(contract.request, {
+                            target: 'draft-2020-12',
+                          }),
+                        },
+                      },
+                      required: true,
+                    },
+                  }),
+              responses: {
+                '200': {
+                  content: {
+                    'application/json': {
+                      schema: z.toJSONSchema(contract.response, {
+                        target: 'draft-2020-12',
+                      }),
+                    },
+                  },
+                  description: 'Successful response',
+                },
+              },
+            },
+          },
+        ]),
+      ),
     },
   };
 }

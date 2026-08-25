@@ -14,6 +14,14 @@ output "production_deploy_role_arn" {
 }
 
 output "deployment_boundary_arn" {
-  description = "Permissions boundary required on GitHub and runtime roles."
+  description = "Permissions boundary required on GitHub deployment roles."
   value       = aws_iam_policy.deployment_boundary.arn
+}
+
+output "runtime_boundary_arns" {
+  description = "Environment-scoped permissions boundaries required on runtime roles."
+  value = {
+    for environment, boundary in aws_iam_policy.runtime_boundary :
+    environment => boundary.arn
+  }
 }

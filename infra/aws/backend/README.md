@@ -13,7 +13,7 @@ variables:
 - `artifact_sha256`: hexadecimal SHA-256 recorded on the alias;
 - `commit_sha`: full selected Git commit;
 - `deployment_url`: GitHub Deployment associated with the commit;
-- `permissions_boundary_arn`: bootstrap-owned boundary for execution roles.
+- `permissions_boundary_arn`: bootstrap-owned, environment-scoped boundary for execution roles.
 
 Selected-ref deployment may apply only the development state for this root. It
 may create a new backend service. Persistent addresses remain undeletable;

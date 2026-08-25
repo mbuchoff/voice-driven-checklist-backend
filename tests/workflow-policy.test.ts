@@ -56,6 +56,7 @@ describe('GitHub Actions policy', () => {
 
     expect(configuration.on).toHaveProperty('pull_request');
     expect(planJob?.if).toContain('head.repo.full_name == github.repository');
+    expect(planJob?.environment).toBe('infrastructure-plan');
     expect(planJob?.permissions).toMatchObject({ 'id-token': 'write' });
     expect(runs(configuration)).toMatch(/tofu .* plan -lock=false/);
     expect(runs(configuration)).not.toContain('tofu apply');

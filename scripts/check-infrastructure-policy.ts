@@ -1,10 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
-import { findLifecycleGuardViolations } from '../src/deployment/lifecycle-policy.js';
+import { findInfrastructurePolicyViolations } from '../src/deployment/infrastructure-policy.js';
 import {
-  findReconstructableDestructiveViolations,
-  findProtectedChangeViolations,
   parseOpenTofuPlan,
   parsePolicyManifest,
 } from '../src/deployment/plan-policy.js';
@@ -37,18 +35,12 @@ async function main(): Promise<void> {
 
   const manifest = parsePolicyManifest(await readJson(resolve(manifestPath)));
   const plan = parseOpenTofuPlan(await readJson(resolve(planPath)));
-  const violations = [
-    ...findProtectedChangeViolations(plan, manifest.planAddresses),
-    ...findReconstructableDestructiveViolations(
-      plan,
-      manifest.planAddresses,
-      destructiveOverride === '--allow-reconstructable-destroy',
-    ),
-    ...(await findLifecycleGuardViolations(
-      resolve(configurationDirectory),
-      manifest.lifecycleBlocks,
-    )),
-  ];
+  const violations = await findInfrastructurePolicyViolations(
+    plan,
+    manifest,
+    resolve(configurationDirectory),
+    destructiveOverride === '--allow-reconstructable-destroy',
+  );
 
   if (violations.length > 0) {
     throw new Error(`Infrastructure policy rejected the plan:\n${violations.join('\n')}`);

@@ -78,12 +78,20 @@ resource "aws_cognito_identity_provider" "google" {
     name     = "name"
     username = "sub"
   }
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_cognito_user_pool_domain" "auth" {
   domain                = var.cognito_domain_prefix
   managed_login_version = 2
   user_pool_id          = aws_cognito_user_pool.auth.id
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "aws_cognito_user_pool_client" "app" {
