@@ -63,6 +63,18 @@ describe('GitHub Actions policy', () => {
     expect(usedActions(configuration).join('\n')).not.toContain('upload-artifact');
   });
 
+  it.each(['infrastructure-plan', 'deploy-development'])(
+    'projects saved plan JSON to policy-relevant fields in %s',
+    async (name) => {
+      const commands = runs(await workflow(name));
+
+      expect(commands).toContain(
+        'resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]',
+      );
+      expect(commands).not.toMatch(/show -json[^\n]*\\\n\s*>/);
+    },
+  );
+
   it('keeps selected-ref development applies backend-only and policy-gated', async () => {
     const configuration = await workflow('deploy-development');
     const deploymentJob = configuration.jobs.deploy;
@@ -114,6 +126,14 @@ describe('GitHub Actions policy', () => {
     );
     expect(commands).toContain('--qualifier "$function_version"');
     expect(commands).toContain('check-deployment-provenance.ts');
+  });
+
+  it('records the immutable Actions run in deployment provenance', async () => {
+    const commands = runs(await workflow('deploy-development'));
+
+    expect(commands).toContain(
+      'https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID',
+    );
   });
 
   it.each(['ci', 'infrastructure-plan', 'deploy-development'])(

@@ -37,4 +37,26 @@ describe('contract generation', () => {
     expect(documents.openapi.paths['/test']).toHaveProperty('post');
     expect(documents.events.events).toHaveProperty('TestCreated');
   });
+
+  it('preserves every HTTP method when contracts share a path', () => {
+    const { openapi } = buildContractDocuments({
+      apiContracts: [
+        {
+          method: 'get',
+          path: '/test',
+          response: z.object({ id: z.string() }),
+        },
+        {
+          method: 'post',
+          path: '/test',
+          request: z.object({ name: z.string() }),
+          response: z.object({ id: z.string() }),
+        },
+      ],
+      eventContracts: {},
+    });
+
+    expect(openapi.paths['/test']).toHaveProperty('get');
+    expect(openapi.paths['/test']).toHaveProperty('post');
+  });
 });

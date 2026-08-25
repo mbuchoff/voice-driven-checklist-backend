@@ -8,11 +8,6 @@ variable "environment" {
   }
 }
 
-variable "deploy_runtime" {
-  description = "Whether this environment has a placeholder Lambda runtime. Production remains false until its first API baseline."
-  type        = bool
-}
-
 variable "aws_region" {
   description = "AWS Region for backend resources."
   type        = string
@@ -24,8 +19,8 @@ variable "artifact_path" {
   type        = string
 
   validation {
-    condition     = !var.deploy_runtime || fileexists(var.artifact_path)
-    error_message = "artifact_path must exist when deploy_runtime is true."
+    condition     = fileexists(var.artifact_path)
+    error_message = "artifact_path must identify an existing artifact."
   }
 }
 

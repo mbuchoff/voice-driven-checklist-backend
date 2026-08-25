@@ -1,3 +1,2 @@
-environment    = "development"
-deploy_runtime = true
-aws_region     = "us-east-1"
+environment = "development"
+aws_region  = "us-east-1"

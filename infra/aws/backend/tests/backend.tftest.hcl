@@ -26,8 +26,7 @@ run "development_runtime_contract" {
   command = plan
 
   variables {
-    deploy_runtime = true
-    environment    = "development"
+    environment = "development"
   }
 
   assert {
@@ -65,8 +64,7 @@ run "production_has_no_placeholder_runtime" {
   command = plan
 
   variables {
-    deploy_runtime = false
-    environment    = "production"
+    environment = "production"
   }
 
   assert {
@@ -83,8 +81,7 @@ run "rejects_unknown_environment" {
   command = plan
 
   variables {
-    deploy_runtime = false
-    environment    = "staging"
+    environment = "staging"
   }
 
   expect_failures = [var.environment]

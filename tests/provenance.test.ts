@@ -1,12 +1,25 @@
 import { describe, expect, it } from 'vitest';
 
-import { validateDeploymentProvenance } from '../src/deployment/provenance.js';
+import {
+  descriptionValue,
+  validateDeploymentProvenance,
+} from '../src/deployment/provenance.js';
 
 const commit = '0123456789abcdef0123456789abcdef01234567';
 const artifactDigest =
   '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 describe('deployment provenance', () => {
+  it('extracts a named value from a Lambda description', () => {
+    expect(descriptionValue(`commit ${commit}; deployment run-url`, 'deployment')).toBe(
+      'run-url',
+    );
+  });
+
+  it('returns an empty value when a Lambda description omits the key', () => {
+    expect(descriptionValue(`commit ${commit}`, 'artifact')).toBe('');
+  });
+
   it('accepts the selected commit and exact artifact digest', () => {
     expect(
       validateDeploymentProvenance(

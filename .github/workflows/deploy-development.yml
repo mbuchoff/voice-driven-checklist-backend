@@ -102,13 +102,15 @@ jobs:
             '{ref: $ref, environment: "development", auto_merge: false, required_contexts: [], description: $description}')
           deployment=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" --input - <<< "$payload")
           deployment_id=$(jq -r .id <<< "$deployment")
-          deployment_url="https://github.com/$GITHUB_REPOSITORY/deployments/development"
+          deployment_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          environment_url="https://github.com/$GITHUB_REPOSITORY/deployments/development"
           echo "id=$deployment_id" >> "$GITHUB_OUTPUT"
           echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "environment_url=$environment_url" >> "$GITHUB_OUTPUT"
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
             -f state=in_progress \
             -f environment=development \
-            -f environment_url="$deployment_url" \
+            -f environment_url="$environment_url" \
             -f description="artifact sha256:${{ steps.package.outputs.sha256 }}" \
             -F auto_inactive=true >/dev/null
       - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
@@ -136,6 +138,7 @@ jobs:
             -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary" \
             -out=/tmp/backend-development.tfplan >/dev/null
           tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
+            | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
             > /tmp/backend-development.json
           override=()
           if [[ "${{ inputs.allow_reconstructable_destroy }}" == "true" ]]; then
@@ -185,7 +188,7 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/${{ steps.deployment.outputs.id }}/statuses" \
             -f state=success \
             -f environment=development \
-            -f environment_url="${{ steps.deployment.outputs.url }}" \
+            -f environment_url="${{ steps.deployment.outputs.environment_url }}" \
             -f description="verified artifact sha256:${{ steps.package.outputs.sha256 }}" \
             -F auto_inactive=true >/dev/null
       - name: Mark deployment failed
@@ -196,5 +199,5 @@ jobs:
           gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/${{ steps.deployment.outputs.id }}/statuses" \
             -f state=failure \
             -f environment=development \
-            -f environment_url="${{ steps.deployment.outputs.url }}" \
+            -f environment_url="${{ steps.deployment.outputs.environment_url }}" \
             -f description="deployment failed; inspect this Actions run" >/dev/null

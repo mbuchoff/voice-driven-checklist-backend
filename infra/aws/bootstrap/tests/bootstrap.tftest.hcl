@@ -18,6 +18,7 @@ variables {
   repository_id       = 1344113852
   repository_owner_id = 13501758
   state_bucket        = "voice-checklist-tofu-state-use1-198771014193"
+  trusted_actor_id    = 13501758
 }
 
 run "github_oidc_contract" {
@@ -61,7 +62,7 @@ run "repository_trust_contract" {
         aws_iam_role.github_plan,
         aws_iam_role.github_development_deploy,
         aws_iam_role.github_production_deploy,
-      ] : strcontains(role.assume_role_policy, "token.actions.githubusercontent.com:actor_id")
+      ] : strcontains(role.assume_role_policy, "\"token.actions.githubusercontent.com:actor_id\":\"13501758\"")
     ])
     error_message = "GitHub roles must be assumable only by the repository owner."
   }
@@ -141,10 +142,50 @@ run "environment_isolation_contract" {
     ])
     error_message = "Runtime permissions boundaries must be explicit least-privilege ceilings."
   }
+
+  assert {
+    condition = alltrue([
+      for boundary_arn in [
+        "arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary",
+        "arn:aws:iam::198771014193:policy/voice-checklist-production-runtime-boundary",
+        ] : anytrue([
+          for statement in jsondecode(aws_iam_policy.deployment_boundary.policy).Statement :
+          statement.Sid == "DenyBoundaryMutation" &&
+          contains(try(tolist(statement.Resource), [statement.Resource]), boundary_arn)
+      ])
+    ])
+    error_message = "The deployment boundary must deny mutation of every runtime permissions boundary."
+  }
 }
 
 run "state_object_retention_contract" {
   command = plan
+
+  assert {
+    condition = alltrue(flatten([
+      for access in [
+        {
+          locks  = ["arn:aws:s3:::voice-checklist-tofu-state-use1-198771014193/voice-checklist/backend/development.tfstate.tflock"]
+          policy = aws_iam_role_policy.development_deploy.policy
+        },
+        {
+          locks = [
+            "arn:aws:s3:::voice-checklist-tofu-state-use1-198771014193/voice-checklist/auth/production.tfstate.tflock",
+            "arn:aws:s3:::voice-checklist-tofu-state-use1-198771014193/voice-checklist/backend/production.tfstate.tflock",
+          ]
+          policy = aws_iam_role_policy.production_deploy.policy
+        },
+        ] : [
+        for lock in access.locks : anytrue([
+          for statement in jsondecode(access.policy).Statement :
+          contains(try(tolist(statement.Action), [statement.Action]), "s3:GetObject") &&
+          contains(try(tolist(statement.Action), [statement.Action]), "s3:PutObject") &&
+          contains(try(tolist(statement.Resource), [statement.Resource]), lock)
+        ])
+      ]
+    ]))
+    error_message = "Deployment roles must be able to read and acquire every native S3 state lock."
+  }
 
   assert {
     condition = alltrue(flatten([
@@ -161,6 +202,35 @@ run "state_object_retention_contract" {
       ]
     ]))
     error_message = "Deployment roles may delete state lock files, never state objects."
+  }
+}
+
+run "log_group_management_contract" {
+  command = plan
+
+  assert {
+    condition = alltrue([
+      for access in [
+        {
+          environment = "development"
+          policy      = aws_iam_role_policy.development_deploy.policy
+        },
+        {
+          environment = "production"
+          policy      = aws_iam_role_policy.production_deploy.policy
+        },
+        ] : anytrue([
+          for statement in jsondecode(access.policy).Statement :
+          contains(try(tolist(statement.Action), [statement.Action]), "logs:CreateLogGroup") &&
+          contains(try(tolist(statement.Action), [statement.Action]), "logs:PutRetentionPolicy") &&
+          contains(try(tolist(statement.Action), [statement.Action]), "logs:TagResource") &&
+          contains(
+            try(tolist(statement.Resource), [statement.Resource]),
+            "arn:aws:logs:us-east-1:198771014193:log-group:/aws/lambda/voice-checklist-${access.environment}-*",
+          )
+      ])
+    ])
+    error_message = "Deployment roles must manage environment log groups through log-group ARNs without a stream suffix."
   }
 }
 

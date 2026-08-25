@@ -12,7 +12,7 @@ variables:
 - `artifact_digest`: base64 SHA-256 used by Lambda `CodeSha256`;
 - `artifact_sha256`: hexadecimal SHA-256 recorded on the alias;
 - `commit_sha`: full selected Git commit;
-- `deployment_url`: GitHub Deployment associated with the commit;
+- `deployment_url`: immutable GitHub Actions run associated with the commit;
 - `permissions_boundary_arn`: bootstrap-owned, environment-scoped boundary for execution roles.
 
 Selected-ref deployment may apply only the development state for this root. It

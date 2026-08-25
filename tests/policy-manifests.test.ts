@@ -64,5 +64,15 @@ describe('protected-resource manifests', () => {
         'aws_cognito_user_pool_client.app["android_play"]',
       ]),
     );
+    expect(development.lifecycleBlocks).toEqual([
+      'aws_cognito_user_pool.auth',
+      'aws_cognito_identity_provider.google',
+      'aws_cognito_user_pool_domain.auth',
+      'aws_cognito_user_pool_client.app',
+      'aws_secretsmanager_secret.google_oauth',
+    ]);
+    expect(production.lifecycleBlocks).toEqual(
+      development.lifecycleBlocks,
+    );
   });
 });

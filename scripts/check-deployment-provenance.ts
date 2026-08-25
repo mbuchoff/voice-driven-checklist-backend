@@ -3,7 +3,10 @@ import { resolve } from 'node:path';
 
 import { z } from 'zod';
 
-import { validateDeploymentProvenance } from '../src/deployment/provenance.js';
+import {
+  descriptionValue,
+  validateDeploymentProvenance,
+} from '../src/deployment/provenance.js';
 
 const aliasSchema = z.object({
   Description: z.string(),
@@ -15,13 +18,6 @@ const configurationSchema = z.object({
   Description: z.string(),
   Version: z.string(),
 });
-
-function descriptionValue(description: string, key: string): string {
-  const entry = description
-    .split('; ')
-    .find((part) => part.startsWith(`${key} `));
-  return entry?.slice(key.length + 1) ?? '';
-}
 
 async function main(): Promise<void> {
   const [

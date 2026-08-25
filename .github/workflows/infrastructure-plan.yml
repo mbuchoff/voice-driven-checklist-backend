@@ -79,6 +79,7 @@ jobs:
               -var-file="environments/$environment.tfvars" \
               -out="/tmp/auth-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/auth show -json "/tmp/auth-$environment.tfplan" \
+              | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
               > "/tmp/auth-$environment.json"
             "$POLICY_ROOT/node_modules/.bin/tsx" \
               "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
@@ -102,6 +103,7 @@ jobs:
               -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-$environment-runtime-boundary" \
               -out="/tmp/backend-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
+              | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
               > "/tmp/backend-$environment.json"
             "$POLICY_ROOT/node_modules/.bin/tsx" \
               "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \

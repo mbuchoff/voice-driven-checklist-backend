@@ -37,6 +37,17 @@ variable "repository_owner_id" {
   }
 }
 
+variable "trusted_actor_id" {
+  description = "GitHub user ID allowed to request deployment credentials."
+  type        = number
+  default     = 13501758
+
+  validation {
+    condition     = var.trusted_actor_id > 0 && floor(var.trusted_actor_id) == var.trusted_actor_id
+    error_message = "trusted_actor_id must be a positive integer."
+  }
+}
+
 variable "state_bucket" {
   description = "Pre-existing encrypted and versioned S3 bucket for OpenTofu state."
   type        = string

@@ -3,6 +3,7 @@ locals {
   execution_role_arn     = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${local.function_name}"
   deployment_description = "commit ${var.commit_sha}; deployment ${var.deployment_url}"
   alias_description      = "commit ${var.commit_sha}; artifact ${var.artifact_sha256}"
+  deploy_runtime         = var.environment == "development"
 }
 
 data "aws_caller_identity" "current" {}
@@ -10,7 +11,7 @@ data "aws_caller_identity" "current" {}
 data "aws_partition" "current" {}
 
 resource "aws_cloudwatch_log_group" "placeholder" {
-  count = var.deploy_runtime ? 1 : 0
+  count = local.deploy_runtime ? 1 : 0
 
   name              = "/aws/lambda/${local.function_name}"
   retention_in_days = 30
@@ -21,7 +22,7 @@ resource "aws_cloudwatch_log_group" "placeholder" {
 }
 
 resource "aws_iam_role" "placeholder" {
-  count = var.deploy_runtime ? 1 : 0
+  count = local.deploy_runtime ? 1 : 0
 
   name                 = local.function_name
   permissions_boundary = var.permissions_boundary_arn
@@ -38,7 +39,7 @@ resource "aws_iam_role" "placeholder" {
 }
 
 resource "aws_iam_role_policy" "placeholder" {
-  count = var.deploy_runtime ? 1 : 0
+  count = local.deploy_runtime ? 1 : 0
 
   name = "cloudwatch-logs"
   role = local.function_name
@@ -58,7 +59,7 @@ resource "aws_iam_role_policy" "placeholder" {
 }
 
 resource "aws_lambda_function" "placeholder" {
-  count = var.deploy_runtime ? 1 : 0
+  count = local.deploy_runtime ? 1 : 0
 
   architectures    = ["arm64"]
   description      = local.deployment_description
@@ -80,7 +81,7 @@ resource "aws_lambda_function" "placeholder" {
 }
 
 resource "aws_lambda_alias" "active" {
-  count = var.deploy_runtime ? 1 : 0
+  count = local.deploy_runtime ? 1 : 0
 
   description      = local.alias_description
   function_name    = one(aws_lambda_function.placeholder).function_name

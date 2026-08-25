@@ -156,7 +156,7 @@ resource "aws_iam_policy" "deployment_boundary" {
         Sid      = "DenyBoundaryMutation"
         Effect   = "Deny"
         Action   = local.boundary_mutation_actions
-        Resource = local.boundary_arn
+        Resource = concat([local.boundary_arn], values(local.runtime_boundary_arns))
       },
     ]
   })
@@ -198,7 +198,7 @@ resource "aws_iam_role" "github_plan" {
         StringEquals = {
           "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:infrastructure-plan"
-          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.trusted_actor_id)
           "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
           "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
           "token.actions.githubusercontent.com:workflow"            = "Infrastructure Plan"
@@ -282,7 +282,7 @@ locals {
         StringEquals = {
           "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:development"
-          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.trusted_actor_id)
           "token.actions.githubusercontent.com:ref"                 = "refs/heads/main"
           "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
           "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
@@ -303,7 +303,7 @@ locals {
         StringEquals = {
           "token.actions.githubusercontent.com:aud"                 = "sts.amazonaws.com"
           "token.actions.githubusercontent.com:sub"                 = "repo:${local.repository_subject}:environment:production"
-          "token.actions.githubusercontent.com:actor_id"            = tostring(var.repository_owner_id)
+          "token.actions.githubusercontent.com:actor_id"            = tostring(var.trusted_actor_id)
           "token.actions.githubusercontent.com:ref"                 = "refs/heads/main"
           "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
           "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
@@ -315,6 +315,15 @@ locals {
   environment_read_actions = [
     "logs:DescribeLogGroups",
     "sts:GetCallerIdentity",
+  ]
+
+  log_group_management_actions = [
+    "logs:CreateLogGroup",
+    "logs:DeleteRetentionPolicy",
+    "logs:ListTagsForResource",
+    "logs:PutRetentionPolicy",
+    "logs:TagResource",
+    "logs:UntagResource",
   ]
 
   deployment_secret_read_actions = [
@@ -379,10 +388,10 @@ locals {
         Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-development-*"
       },
       {
-        Sid      = "ManageDevelopmentLogs"
+        Sid      = "ManageDevelopmentLogGroups"
         Effect   = "Allow"
-        Action   = "logs:*"
-        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*:*"
+        Action   = local.log_group_management_actions
+        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*"
       },
       {
         Sid      = "CreateDevelopmentRuntimeRoles"
@@ -424,10 +433,10 @@ locals {
         }
       },
       {
-        Sid      = "ReadWriteDevelopmentState"
+        Sid      = "ReadWriteDevelopmentStateAndLocks"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject"]
-        Resource = local.environment_state_objects.development
+        Resource = concat(local.environment_state_objects.development, local.environment_lock_objects.development)
       },
       {
         Sid      = "DeleteDevelopmentStateLocks"
@@ -465,10 +474,10 @@ locals {
         Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-production-*"
       },
       {
-        Sid      = "ManageProductionLogs"
+        Sid      = "ManageProductionLogGroups"
         Effect   = "Allow"
-        Action   = "logs:*"
-        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-production-*:*"
+        Action   = local.log_group_management_actions
+        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-production-*"
       },
       {
         Sid    = "DenyCognitoDeletion"
@@ -531,10 +540,10 @@ locals {
         }
       },
       {
-        Sid      = "ReadWriteProductionState"
+        Sid      = "ReadWriteProductionStateAndLocks"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject"]
-        Resource = local.environment_state_objects.production
+        Resource = concat(local.environment_state_objects.production, local.environment_lock_objects.production)
       },
       {
         Sid      = "DeleteProductionStateLocks"
