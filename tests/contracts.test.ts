@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { describe, expect, it } from 'vitest';
 
 import { buildContractDocuments } from '../src/contracts/catalog.js';
@@ -16,5 +17,24 @@ describe('contract generation', () => {
     const { openapi } = buildContractDocuments();
 
     expect(Object.keys(openapi.paths).some((path) => path.startsWith('/v1'))).toBe(false);
+  });
+
+  it('generates API and event documents from code-first contracts', () => {
+    const documents = buildContractDocuments({
+      apiContracts: [
+        {
+          method: 'post',
+          path: '/test',
+          request: z.object({ name: z.string() }),
+          response: z.object({ id: z.string() }),
+        },
+      ],
+      eventContracts: {
+        TestCreated: { schema: z.object({ id: z.string() }) },
+      },
+    });
+
+    expect(documents.openapi.paths['/test']).toHaveProperty('post');
+    expect(documents.events.events).toHaveProperty('TestCreated');
   });
 });

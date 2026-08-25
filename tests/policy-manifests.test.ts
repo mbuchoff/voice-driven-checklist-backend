@@ -50,6 +50,8 @@ describe('protected-resource manifests', () => {
     expect(development.planAddresses).toEqual(
       expect.arrayContaining([
         'aws_cognito_user_pool.auth',
+        'aws_cognito_identity_provider.google',
+        'aws_cognito_user_pool_domain.auth',
         'aws_cognito_user_pool_client.app["android_debug"]',
         'aws_cognito_user_pool_client.app["web_localhost"]',
       ]),
@@ -57,6 +59,8 @@ describe('protected-resource manifests', () => {
     expect(production.planAddresses).toEqual(
       expect.arrayContaining([
         'aws_cognito_user_pool.auth',
+        'aws_cognito_identity_provider.google',
+        'aws_cognito_user_pool_domain.auth',
         'aws_cognito_user_pool_client.app["android_play"]',
       ]),
     );

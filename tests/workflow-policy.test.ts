@@ -77,6 +77,22 @@ describe('GitHub Actions policy', () => {
     expect(commands).toMatch(/tofu .* apply/);
   });
 
+  it('requires an explicit manual input before deleting reconstructable resources', async () => {
+    const configuration = await workflow('deploy-development');
+    const commands = runs(configuration);
+
+    expect(commands).toContain('inputs.allow_reconstructable_destroy');
+    expect(commands).not.toContain('github.event_name');
+  });
+
+  it('keeps advisory-database checks out of the deterministic deployment path', async () => {
+    const deployment = await workflow('deploy-development');
+    const continuousIntegration = await workflow('ci');
+
+    expect(runs(deployment)).not.toContain('npm audit');
+    expect(runs(continuousIntegration)).toContain('npm audit');
+  });
+
   it('retains the exact development artifact for the accepted 90-day window', async () => {
     const configuration = await workflow('deploy-development');
     const upload = Object.values(configuration.jobs)
@@ -96,6 +112,7 @@ describe('GitHub Actions policy', () => {
       'function_version=$(jq -r .FunctionVersion <<< "$alias")',
     );
     expect(commands).toContain('--qualifier "$function_version"');
+    expect(commands).toContain('check-deployment-provenance.ts');
   });
 
   it.each(['ci', 'infrastructure-plan', 'deploy-development'])(
