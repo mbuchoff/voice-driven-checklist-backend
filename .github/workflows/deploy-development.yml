@@ -137,16 +137,14 @@ jobs:
             -var="deployment_url=${{ steps.deployment.outputs.url }}" \
             -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary" \
             -out=/tmp/backend-development.tfplan >/dev/null
-          tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
-            | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
-            > /tmp/backend-development.json
           override=()
           if [[ "${{ inputs.allow_reconstructable_destroy }}" == "true" ]]; then
             override+=(--allow-reconstructable-destroy)
           fi
-          ../policy/node_modules/.bin/tsx \
+          tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
+            | ../policy/node_modules/.bin/tsx \
             ../policy/scripts/check-infrastructure-policy.ts \
-            /tmp/backend-development.json \
+            - \
             ../policy/infra/policy/backend-development.json \
             infra/aws/backend \
             "${override[@]}"
@@ -192,7 +190,7 @@ jobs:
             -f description="verified artifact sha256:${{ steps.package.outputs.sha256 }}" \
             -F auto_inactive=true >/dev/null
       - name: Mark deployment failed
-        if: failure() && steps.deployment.outputs.id != ''
+        if: (failure() || cancelled()) && steps.deployment.outputs.id != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

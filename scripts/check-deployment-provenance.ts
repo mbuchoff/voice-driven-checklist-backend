@@ -51,24 +51,19 @@ async function main(): Promise<void> {
   );
   const violations = validateDeploymentProvenance(
     {
+      aliasFunctionVersion: alias.FunctionVersion,
       artifactDigest: descriptionValue(alias.Description, 'artifact'),
+      codeDigest: configuration.CodeSha256,
       commit: descriptionValue(alias.Description, 'commit'),
+      configurationVersion: configuration.Version,
+      versionCommit: descriptionValue(configuration.Description, 'commit'),
+      versionDeploymentUrl: descriptionValue(
+        configuration.Description,
+        'deployment',
+      ),
     },
-    { artifactDigest: sha256, commit },
+    { artifactDigest: sha256, codeDigest: digest, commit, deploymentUrl },
   );
-
-  if (configuration.CodeSha256 !== digest) {
-    violations.push('deployed Lambda code differs from the selected artifact');
-  }
-  if (descriptionValue(configuration.Description, 'commit') !== commit) {
-    violations.push('published Lambda version differs from the selected commit');
-  }
-  if (descriptionValue(configuration.Description, 'deployment') !== deploymentUrl) {
-    violations.push('published Lambda version differs from the GitHub Deployment');
-  }
-  if (configuration.Version === '$LATEST') {
-    violations.push('active alias must select an immutable Lambda version');
-  }
 
   if (violations.length > 0) {
     throw new Error(

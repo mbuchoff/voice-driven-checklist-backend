@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 const stepSchema = z
   .object({
+    if: z.string().optional(),
     run: z.string().optional(),
     uses: z.string().optional(),
     with: z.record(z.string(), z.unknown()).optional(),
@@ -64,16 +65,29 @@ describe('GitHub Actions policy', () => {
   });
 
   it.each(['infrastructure-plan', 'deploy-development'])(
-    'projects saved plan JSON to policy-relevant fields in %s',
+    'pipes every plan directly to the policy checker in %s',
     async (name) => {
       const commands = runs(await workflow(name));
+      const lines = commands.split('\n');
+      const pipelines = lines
+        .map((line, index) => ({ index, line }))
+        .filter(({ line }) => line.includes(' show -json '))
+        .map(({ index }) => lines.slice(index, index + 8).join('\n'));
 
-      expect(commands).toContain(
-        'resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]',
-      );
-      expect(commands).not.toMatch(/show -json[^\n]*\\\n\s*>/);
+      expect(pipelines).not.toEqual([]);
+      for (const pipeline of pipelines) {
+        expect(pipeline).toContain('check-infrastructure-policy.ts');
+        expect(pipeline).toMatch(/\n\s+- \\/);
+        expect(pipeline).not.toMatch(/\n\s*>\s/);
+      }
     },
   );
+
+  it('runs a speculative infrastructure plan for every pull request', async () => {
+    const configuration = await workflow('infrastructure-plan');
+
+    expect(configuration.on.pull_request).toEqual({});
+  });
 
   it('keeps selected-ref development applies backend-only and policy-gated', async () => {
     const configuration = await workflow('deploy-development');
@@ -96,6 +110,15 @@ describe('GitHub Actions policy', () => {
 
     expect(commands).toContain('inputs.allow_reconstructable_destroy');
     expect(commands).not.toContain('github.event_name');
+  });
+
+  it('closes a GitHub Deployment when a run is cancelled', async () => {
+    const configuration = await workflow('deploy-development');
+    const failedStatusJob = configuration.jobs.deploy?.steps.find((step) =>
+      step.run?.includes('state=failure'),
+    );
+
+    expect(failedStatusJob?.if).toContain('cancelled()');
   });
 
   it('keeps advisory-database checks out of the deterministic deployment path', async () => {

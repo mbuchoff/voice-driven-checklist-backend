@@ -201,7 +201,6 @@ resource "aws_iam_role" "github_plan" {
           "token.actions.githubusercontent.com:actor_id"            = tostring(var.trusted_actor_id)
           "token.actions.githubusercontent.com:repository_id"       = tostring(var.repository_id)
           "token.actions.githubusercontent.com:repository_owner_id" = tostring(var.repository_owner_id)
-          "token.actions.githubusercontent.com:workflow"            = "Infrastructure Plan"
         }
       }
     }]

@@ -68,6 +68,11 @@ run "repository_trust_contract" {
   }
 
   assert {
+    condition     = !strcontains(aws_iam_role.github_plan.assume_role_policy, "token.actions.githubusercontent.com:workflow")
+    error_message = "Plan trust must not depend on the mutable workflow display name."
+  }
+
+  assert {
     condition = alltrue([
       for role in [
         aws_iam_role.github_development_deploy,

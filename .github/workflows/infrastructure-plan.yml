@@ -1,14 +1,7 @@
 name: Infrastructure Plan
 
 on:
-  pull_request:
-    paths:
-      - .github/workflows/**
-      - infra/**
-      - package-lock.json
-      - package.json
-      - scripts/check-infrastructure-policy.ts
-      - src/deployment/**
+  pull_request: {}
 
 permissions:
   contents: read
@@ -79,11 +72,9 @@ jobs:
               -var-file="environments/$environment.tfvars" \
               -out="/tmp/auth-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/auth show -json "/tmp/auth-$environment.tfplan" \
-              | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
-              > "/tmp/auth-$environment.json"
-            "$POLICY_ROOT/node_modules/.bin/tsx" \
+              | "$POLICY_ROOT/node_modules/.bin/tsx" \
               "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
-              "/tmp/auth-$environment.json" \
+              - \
               "$POLICY_ROOT/infra/policy/auth-$environment.json" \
               candidate/infra/aws/auth
           done
@@ -103,11 +94,9 @@ jobs:
               -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-$environment-runtime-boundary" \
               -out="/tmp/backend-$environment.tfplan" >/dev/null
             tofu -chdir=candidate/infra/aws/backend show -json "/tmp/backend-$environment.tfplan" \
-              | jq '{resource_changes: [(.resource_changes // [])[] | {address, mode, change: {actions: .change.actions}}]}' \
-              > "/tmp/backend-$environment.json"
-            "$POLICY_ROOT/node_modules/.bin/tsx" \
+              | "$POLICY_ROOT/node_modules/.bin/tsx" \
               "$POLICY_ROOT/scripts/check-infrastructure-policy.ts" \
-              "/tmp/backend-$environment.json" \
+              - \
               "$POLICY_ROOT/infra/policy/backend-$environment.json" \
               candidate/infra/aws/backend
           done

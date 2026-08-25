@@ -1,9 +1,22 @@
 export interface DeploymentProvenance {
+  readonly aliasFunctionVersion: string;
   readonly artifactDigest: string;
+  readonly codeDigest: string;
   readonly commit: string;
+  readonly configurationVersion: string;
+  readonly versionCommit: string;
+  readonly versionDeploymentUrl: string;
+}
+
+export interface DeploymentSelection {
+  readonly artifactDigest: string;
+  readonly codeDigest: string;
+  readonly commit: string;
+  readonly deploymentUrl: string;
 }
 
 const fullCommitPattern = /^[0-9a-f]{40}$/;
+const publishedVersionPattern = /^[1-9]\d*$/;
 const sha256Pattern = /^[0-9a-f]{64}$/;
 
 export function descriptionValue(description: string, key: string): string {
@@ -15,7 +28,7 @@ export function descriptionValue(description: string, key: string): string {
 
 export function validateDeploymentProvenance(
   actual: DeploymentProvenance,
-  selected: DeploymentProvenance,
+  selected: DeploymentSelection,
 ): string[] {
   const violations: string[] = [];
 
@@ -30,6 +43,21 @@ export function validateDeploymentProvenance(
   }
   if (actual.artifactDigest !== selected.artifactDigest) {
     violations.push('deployed artifact differs from the selected artifact');
+  }
+  if (actual.codeDigest !== selected.codeDigest) {
+    violations.push('deployed Lambda code differs from the selected artifact');
+  }
+  if (actual.versionCommit !== selected.commit) {
+    violations.push('published Lambda version differs from the selected commit');
+  }
+  if (actual.versionDeploymentUrl !== selected.deploymentUrl) {
+    violations.push('published Lambda version differs from the GitHub Deployment');
+  }
+  if (!publishedVersionPattern.test(actual.aliasFunctionVersion)) {
+    violations.push('active alias must select an immutable Lambda version');
+  }
+  if (actual.configurationVersion !== actual.aliasFunctionVersion) {
+    violations.push('deployed Lambda configuration differs from the active alias');
   }
 
   return violations;

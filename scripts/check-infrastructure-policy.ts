@@ -8,7 +8,21 @@ import {
 } from '../src/deployment/plan-policy.js';
 
 async function readJson(path: string): Promise<unknown> {
-  return JSON.parse(await readFile(path, 'utf8')) as unknown;
+  let source: string;
+  if (path === '-') {
+    process.stdin.setEncoding('utf8');
+    source = '';
+    for await (const chunk of process.stdin as AsyncIterable<unknown>) {
+      if (typeof chunk !== 'string') {
+        throw new Error('Infrastructure plan input must be UTF-8 text.');
+      }
+      source += chunk;
+    }
+  } else {
+    source = await readFile(resolve(path), 'utf8');
+  }
+
+  return JSON.parse(source) as unknown;
 }
 
 async function main(): Promise<void> {
@@ -29,12 +43,12 @@ async function main(): Promise<void> {
       destructiveOverride !== '--allow-reconstructable-destroy')
   ) {
     throw new Error(
-      'Usage: check-infrastructure-policy <plan.json> <manifest.json> <configuration-directory> [--allow-reconstructable-destroy]',
+      'Usage: check-infrastructure-policy <plan.json|-> <manifest.json> <configuration-directory> [--allow-reconstructable-destroy]',
     );
   }
 
   const manifest = parsePolicyManifest(await readJson(resolve(manifestPath)));
-  const plan = parseOpenTofuPlan(await readJson(resolve(planPath)));
+  const plan = parseOpenTofuPlan(await readJson(planPath));
   const violations = await findInfrastructurePolicyViolations(
     plan,
     manifest,
