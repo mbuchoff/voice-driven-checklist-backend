@@ -1,0 +1,8 @@
+{
+  "environment": "production",
+  "lifecycleBlocks": [
+    "aws_cloudwatch_log_group.placeholder"
+  ],
+  "planAddresses": [],
+  "stack": "backend"
+}

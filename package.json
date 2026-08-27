@@ -1,0 +1,39 @@
+{
+  "name": "voice-driven-checklist-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Serverless backend for Voice-Driven Checklist",
+  "license": "MIT",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "npm run clean && npm run build:handler && npm run contracts",
+    "build:handler": "esbuild src/handler.ts --bundle --platform=node --target=node24 --format=cjs --outfile=dist/handler/index.js",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { force: true, recursive: true })\"",
+    "contracts": "tsx scripts/generate-contracts.ts",
+    "lint": "eslint .",
+    "package:artifact": "tsx scripts/package-artifact.ts",
+    "test": "vitest run --coverage",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@cdktf/hcl2json": "0.21.0",
+    "@eslint/js": "10.0.1",
+    "@types/aws-lambda": "8.10.162",
+    "@types/node": "24.10.12",
+    "@vitest/coverage-v8": "4.1.11",
+    "esbuild": "0.28.2",
+    "eslint": "10.9.0",
+    "fflate": "0.8.3",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.67.0",
+    "vitest": "4.1.11",
+    "yaml": "2.9.0"
+  }
+}

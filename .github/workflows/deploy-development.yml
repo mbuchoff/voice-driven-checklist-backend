@@ -1,0 +1,205 @@
+name: Deploy Development
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or full commit to deploy to development
+        required: true
+        default: main
+        type: string
+      allow_reconstructable_destroy:
+        description: Permit deletion or replacement of reconstructable development resources
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-deployment
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_PLUGIN_CACHE_DIR: /tmp/tofu-plugin-cache
+    steps:
+      - name: Check out selected ref
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+          fetch-depth: 0
+          path: candidate
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+      - name: Verify selected commit
+        id: selection
+        working-directory: candidate
+        shell: bash
+        run: |
+          selected_sha=$(git rev-parse HEAD)
+          if [[ ! "$selected_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Selected ref did not resolve to a full commit SHA." >&2
+            exit 1
+          fi
+          echo "sha=$selected_sha" >> "$GITHUB_OUTPUT"
+      - name: Install candidate dependencies
+        run: npm --prefix candidate ci
+      - name: Test and build selected commit
+        working-directory: candidate
+        run: |
+          npm run lint
+          npm run typecheck
+          npm test
+          npm run build
+      - name: Package exact Lambda artifact
+        id: package
+        working-directory: candidate
+        shell: bash
+        run: |
+          npm run package:artifact
+          artifact_sha256=$(sha256sum dist/artifact/lambda.zip | cut -d' ' -f1)
+          artifact_digest=$(openssl dgst -sha256 -binary dist/artifact/lambda.zip | openssl base64 -A)
+          echo "sha256=$artifact_sha256" >> "$GITHUB_OUTPUT"
+          echo "digest=$artifact_digest" >> "$GITHUB_OUTPUT"
+      - name: Retain selected artifact
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: lambda-${{ steps.selection.outputs.sha }}
+          path: candidate/dist/artifact/lambda.zip
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 90
+      - name: Create GitHub Deployment
+        id: deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          payload=$(jq -n \
+            --arg ref "${{ steps.selection.outputs.sha }}" \
+            --arg description "Lambda sha256:${{ steps.package.outputs.sha256 }}; Actions artifact:${{ steps.upload.outputs.artifact-id }}" \
+            '{ref: $ref, environment: "development", auto_merge: false, required_contexts: [], description: $description}')
+          deployment=$(gh api --method POST "repos/$GITHUB_REPOSITORY/deployments" --input - <<< "$payload")
+          deployment_id=$(jq -r .id <<< "$deployment")
+          deployment_url="https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          environment_url="https://github.com/$GITHUB_REPOSITORY/deployments/development"
+          echo "id=$deployment_id" >> "$GITHUB_OUTPUT"
+          echo "url=$deployment_url" >> "$GITHUB_OUTPUT"
+          echo "environment_url=$environment_url" >> "$GITHUB_OUTPUT"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/$deployment_id/statuses" \
+            -f state=in_progress \
+            -f environment=development \
+            -f environment_url="$environment_url" \
+            -f description="artifact sha256:${{ steps.package.outputs.sha256 }}" \
+            -F auto_inactive=true >/dev/null
+      - uses: opentofu/setup-opentofu@a1320f892987e89d278cc92dc5adc984fb93aca4 # v2.0.2
+        with:
+          tofu_version: 1.12.5
+      - uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
+        with:
+          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::198771014193:role/voice-checklist-github-development-deploy
+          role-session-name: development-deployment
+      - name: Save development deployment plan
+        working-directory: candidate
+        shell: bash
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          tofu -chdir=infra/aws/backend init -reconfigure -input=false \
+            -backend-config=environments/development.s3.tfbackend
+          tofu -chdir=infra/aws/backend plan -input=false \
+            -var-file=environments/development.tfvars \
+            -var="artifact_path=${{ github.workspace }}/candidate/dist/artifact/lambda.zip" \
+            -var="artifact_digest=${{ steps.package.outputs.digest }}" \
+            -var="artifact_sha256=${{ steps.package.outputs.sha256 }}" \
+            -var="commit_sha=${{ steps.selection.outputs.sha }}" \
+            -var="deployment_url=${{ steps.deployment.outputs.url }}" \
+            -var="permissions_boundary_arn=arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary" \
+            -out=/tmp/backend-development.tfplan >/dev/null
+      - name: Check out main-owned deployment policy
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          path: policy
+      - name: Install trusted policy dependencies
+        run: npm --prefix policy ci
+      - name: Check guarded development plan
+        working-directory: candidate
+        shell: bash
+        run: |
+          override=()
+          if [[ "${{ inputs.allow_reconstructable_destroy }}" == "true" ]]; then
+            override+=(--allow-reconstructable-destroy)
+          fi
+          tofu -chdir=infra/aws/backend show -json /tmp/backend-development.tfplan \
+            | ../policy/node_modules/.bin/tsx \
+            ../policy/scripts/check-infrastructure-policy.ts \
+            - \
+            ../policy/infra/policy/backend-development.json \
+            infra/aws/backend \
+            "${override[@]}"
+      - name: Apply selected development plan
+        working-directory: candidate
+        run: tofu -chdir=infra/aws/backend apply -input=false -auto-approve /tmp/backend-development.tfplan
+      - name: Verify deployed commit, artifact, alias, and invocation
+        working-directory: candidate
+        shell: bash
+        run: |
+          function_name=$(tofu -chdir=infra/aws/backend output -raw function_name)
+          alias=$(aws lambda get-alias --function-name "$function_name" --name active)
+          function_version=$(jq -r .FunctionVersion <<< "$alias")
+          configuration=$(aws lambda get-function-configuration \
+            --function-name "$function_name" \
+            --qualifier "$function_version")
+          printf '%s' "$configuration" > /tmp/lambda-configuration.json
+          printf '%s' "$alias" > /tmp/lambda-alias.json
+          ../policy/node_modules/.bin/tsx \
+            ../policy/scripts/check-deployment-provenance.ts \
+            /tmp/lambda-configuration.json \
+            /tmp/lambda-alias.json \
+            "${{ steps.selection.outputs.sha }}" \
+            "${{ steps.package.outputs.digest }}" \
+            "${{ steps.package.outputs.sha256 }}" \
+            "${{ steps.deployment.outputs.url }}"
+          aws lambda invoke \
+            --function-name "$function_name" \
+            --qualifier active \
+            --cli-binary-format raw-in-base64-out \
+            --payload '{}' \
+            /tmp/lambda-response.json >/dev/null
+          jq -e '.statusCode == 200 and (.body | fromjson | .status == "ok")' \
+            /tmp/lambda-response.json >/dev/null
+      - name: Mark deployment successful
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/${{ steps.deployment.outputs.id }}/statuses" \
+            -f state=success \
+            -f environment=development \
+            -f environment_url="${{ steps.deployment.outputs.environment_url }}" \
+            -f description="verified artifact sha256:${{ steps.package.outputs.sha256 }}" \
+            -F auto_inactive=true >/dev/null
+      - name: Mark deployment failed
+        if: (failure() || cancelled()) && steps.deployment.outputs.id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/$GITHUB_REPOSITORY/deployments/${{ steps.deployment.outputs.id }}/statuses" \
+            -f state=failure \
+            -f environment=development \
+            -f environment_url="${{ steps.deployment.outputs.environment_url }}" \
+            -f description="deployment failed; inspect this Actions run" >/dev/null

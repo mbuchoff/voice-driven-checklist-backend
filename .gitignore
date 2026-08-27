@@ -8,5 +8,4 @@ coverage/
 *.tfstate.*
 *.tfplan
 .terraform/
-.terraform.lock.hcl
 .DS_Store
