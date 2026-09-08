@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import { parse } from 'yaml';
 import { z } from 'zod';
@@ -8,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 const stepSchema = z
   .object({
     if: z.string().optional(),
+    env: z.record(z.string(), z.string()).optional(),
     name: z.string().optional(),
     run: z.string().optional(),
     uses: z.string().optional(),
@@ -19,6 +21,7 @@ const jobSchema = z
   .object({
     environment: z.union([z.string(), z.object({ name: z.string() }).loose()]).optional(),
     if: z.string().optional(),
+    needs: z.union([z.string(), z.array(z.string())]).optional(),
     permissions: z.record(z.string(), z.string()).optional(),
     steps: z.array(stepSchema),
   })
@@ -54,7 +57,7 @@ function usedActions(configuration: Workflow): string[] {
 describe('GitHub Actions policy', () => {
   it('runs trusted pull-request plans without giving forks AWS credentials', async () => {
     const configuration = await workflow('infrastructure-plan');
-    const planJob = configuration.jobs.plan;
+    const planJob = configuration.jobs['plan-infrastructure'];
 
     expect(configuration.on).toHaveProperty('pull_request');
     expect(planJob?.if).toContain('head.repo.full_name == github.repository');
@@ -64,6 +67,31 @@ describe('GitHub Actions policy', () => {
     expect(runs(configuration)).not.toContain('tofu apply');
     expect(usedActions(configuration).join('\n')).not.toContain('upload-artifact');
   });
+
+  it.each(['success', 'failure', 'cancelled', 'skipped'])(
+    'makes the required plan check fail closed when infrastructure result is %s',
+    async (result) => {
+      const configuration = await workflow('infrastructure-plan');
+      const gate = configuration.jobs.plan;
+
+      // GitHub accepts skipped required checks. Keep the credential-bearing job
+      // fork-guarded, but evaluate its result in an unconditional, unprivileged job.
+      expect(gate?.needs).toBe('plan-infrastructure');
+      expect(gate?.if).toBe('${{ always() }}');
+      expect(gate?.permissions).toEqual({});
+      expect(gate?.environment).toBeUndefined();
+      expect(gate?.steps).toHaveLength(1);
+      const step = gate?.steps[0];
+      expect(step?.env?.PLAN_RESULT).toBe('${{ needs.plan-infrastructure.result }}');
+      expect(step?.run).toBeDefined();
+      const execution = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step?.run ?? ''], {
+        encoding: 'utf8',
+        env: { PATH: process.env.PATH, PLAN_RESULT: result },
+      });
+      expect(execution.error).toBeUndefined();
+      expect(execution.status).toBe(result === 'success' ? 0 : 1);
+    },
+  );
 
   it.each(['infrastructure-plan', 'deploy-development'])(
     'pipes every plan directly to the policy checker in %s',
@@ -127,10 +155,10 @@ describe('GitHub Actions policy', () => {
 
   it('pins speculative plan policy to main with a PR-1-only bootstrap fallback', async () => {
     const configuration = await workflow('infrastructure-plan');
-    const policyCheckout = configuration.jobs.plan?.steps.find((step) =>
+    const policyCheckout = configuration.jobs['plan-infrastructure']?.steps.find((step) =>
       step.name?.includes('trusted policy'),
     );
-    const policyInstall = configuration.jobs.plan?.steps.find((step) =>
+    const policyInstall = configuration.jobs['plan-infrastructure']?.steps.find((step) =>
       step.run?.includes('POLICY_ROOT'),
     );
 

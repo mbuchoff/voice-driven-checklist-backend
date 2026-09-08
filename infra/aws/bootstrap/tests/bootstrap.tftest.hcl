@@ -97,6 +97,33 @@ run "plan_secret_read_contract" {
   }
 }
 
+run "runtime_role_policy_refresh" {
+  command = plan
+
+  # The AWS provider refreshes managed policy attachments even when the runtime
+  # role has only inline policies (failed development run 33067430555).
+  assert {
+    condition = alltrue([
+      for access in [
+        {
+          environment = "development"
+          policy      = aws_iam_role_policy.development_deploy.policy
+        },
+        {
+          environment = "production"
+          policy      = aws_iam_role_policy.production_deploy.policy
+        },
+        ] : anytrue([
+          for statement in jsondecode(access.policy).Statement :
+          statement.Effect == "Allow" &&
+          contains(try(tolist(statement.Action), [statement.Action]), "iam:ListAttachedRolePolicies") &&
+          statement.Resource == "arn:aws:iam::198771014193:role/voice-checklist-${access.environment}-*"
+      ])
+    ])
+    error_message = "Each deployment role must refresh managed-policy attachments on its own runtime roles."
+  }
+}
+
 run "environment_isolation_contract" {
   command = plan
 
