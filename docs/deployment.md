@@ -2,9 +2,10 @@
 
 ## Pull-request plans
 
-`infrastructure-plan.yml` runs only when the pull request head belongs to this
-repository and the repository owner approves its `infrastructure-plan`
-environment. The AWS role independently restricts assumption to that immutable
+`infrastructure-plan.yml` publishes the required `plan` check for every pull
+request. Its credential-bearing `plan-infrastructure` job runs only when the pull
+request head belongs to this repository and the repository owner approves its
+`infrastructure-plan` environment. The AWS role independently restricts assumption to that immutable
 owner ID. The workflow checks out the candidate separately from the current
 `main` branch's trusted policy implementation and manifests. PR #1 alone falls
 back to its candidate policy because the minimal `main` branch predates the
@@ -15,6 +16,69 @@ The plan role can read only the four environment state objects, the two Google
 deployment secrets, and provider metadata needed for refresh. Plans use
 `-lock=false`, emit no state mutation, upload no plan file, and print only the
 accepted stack/environment or protected-address violation.
+
+The final `plan` job runs even when infrastructure validation fails, is cancelled,
+or is skipped; only a successful validation passes. It has no checkout, environment
+or token permissions. Fork PRs therefore cannot satisfy the required check by
+skipping AWS work. Review a fork contribution and bring it onto a trusted branch
+before running infrastructure validation; do not give forks OIDC access or switch
+this workflow to `pull_request_target`.
+
+### Main protection
+
+The reviewed REST payload is [main.ruleset.json](../infra/github/main.ruleset.json).
+It requires a PR and current, up-to-date `test` and `plan` checks from the GitHub
+Actions integration (app ID 15368), blocks force pushes/deletion, and has no bypass
+actors. No human PR approval is required. The existing owner approval for the
+AWS-bearing `infrastructure-plan` environment is a separate credential-release
+gate, not a PR review requirement; the owner can approve their own run. Never add
+a review gate that the repository's sole owner cannot satisfy.
+
+The payload is not applied by a workflow. After explicit ruleset authorization:
+
+1. Re-read current rulesets and main protection. On 2026-09-08 there were no
+   rulesets; stop and reconcile if another policy now exists rather than adding
+   duplicates or overwriting it.
+2. Ensure the fail-closed `plan` wrapper is present in the candidate and main, and
+   check actual PR check names and GitHub App IDs. A skipped or neutral required
+   check is accepted by GitHub, so the old skipped job is not sufficient.
+3. Apply the reviewed payload to `repos/mbuchoff/voice-driven-checklist-backend/rulesets`
+   (POST for first creation; PUT to the reviewed rule ID for an update), then
+   read back the rule and effective main rules.
+4. Verify with an authorized disposable PR: red `test` or `plan` blocks merge,
+   skipped infrastructure work produces a failed `plan`, success on an up-to-date
+   candidate satisfies checks, and no bypass actor is configured. Observe merge
+   eligibility; do not merge, force-push, or delete main as a test.
+
+Applying the ruleset before its workflow is available leaves the old skipped-check
+gap; uploading this JSON alone does not enforce anything. Post-merge `deploy` must
+not be a required PR check. Ruleset changes never authorize a merge.
+
+References: [GitHub required checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging)
+and [ruleset API](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset).
+
+### Deployment-role refresh permissions
+
+Development run [33067430555](https://github.com/mbuchoff/voice-driven-checklist-backend/actions/runs/33067430555)
+failed because the AWS provider calls `iam:ListAttachedRolePolicies` when refreshing
+the runtime role, including a role with no managed-policy attachments. The manual
+bootstrap root supplies that read action only on each environment's runtime-role
+ARN pattern. Its shared action list covers both development and production deploy
+roles. No runtime permission, trust-policy, boundary, or resource scope is widened.
+
+The PR plan role already permits `iam:Get*`/`iam:List*`, whereas deployment roles
+use an explicit action list. A green PR plan therefore does not prove deployment
+permissions. The regression test evaluates the actual bootstrap-generated policies;
+it does not simulate effective AWS permissions or replace a deployed verification.
+
+Review a fresh manual bootstrap plan and obtain approval for its exact changes
+before apply, including the production deploy-role policy update. Do not run a
+bootstrap apply from GitHub or bypass review with an ad-hoc IAM patch. After apply,
+verify the intended role policies and run the approved development workflow from
+main and a selected immutable ref, retaining its existing artifact/alias/live
+invocation evidence. If another permission fails, investigate that exact failure;
+do not infer a broad grant from this fix. Until those runs pass, GH-28 foundation
+repair and the GH-29 runtime gate remain incomplete.
 
 ## Development deployment
 
