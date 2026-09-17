@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  plan:
+  plan-infrastructure:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: infrastructure-plan
@@ -114,3 +114,20 @@ jobs:
               "$POLICY_ROOT/infra/policy/backend-$environment.json" \
               candidate/infra/aws/backend
           done
+
+  # A skipped check satisfies GitHub's required-check policy. Keep AWS access
+  # guarded above, and publish the required result without checkout or credentials.
+  plan:
+    needs: plan-infrastructure
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Require successful infrastructure validation
+        env:
+          PLAN_RESULT: ${{ needs.plan-infrastructure.result }}
+        run: |
+          if [[ "$PLAN_RESULT" != "success" ]]; then
+            echo "Infrastructure validation did not pass ($PLAN_RESULT). Fork contributions must be reviewed and rerun from a trusted repository branch." >&2
+            exit 1
+          fi

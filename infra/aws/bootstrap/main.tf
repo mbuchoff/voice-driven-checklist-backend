@@ -348,6 +348,7 @@ locals {
     "iam:DeleteRolePolicy",
     "iam:GetRole",
     "iam:GetRolePolicy",
+    "iam:ListAttachedRolePolicies",
     "iam:ListRolePolicies",
     "iam:PutRolePolicy",
     "iam:TagRole",
