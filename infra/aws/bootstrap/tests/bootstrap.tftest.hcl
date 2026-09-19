@@ -117,10 +117,35 @@ run "runtime_role_policy_refresh" {
           for statement in jsondecode(access.policy).Statement :
           statement.Effect == "Allow" &&
           contains(try(tolist(statement.Action), [statement.Action]), "iam:ListAttachedRolePolicies") &&
-          statement.Resource == "arn:aws:iam::198771014193:role/voice-checklist-${access.environment}-*"
+          contains(try(tolist(statement.Resource), [statement.Resource]), "arn:aws:iam::198771014193:role/voice-checklist-${access.environment}-*")
       ])
     ])
-    error_message = "Each deployment role must refresh managed-policy attachments on its own runtime roles."
+    error_message = "Each deployment role must grant iam:ListAttachedRolePolicies on its own runtime roles."
+  }
+
+  assert {
+    condition = alltrue([
+      for access in [
+        {
+          environment = "development"
+          policy      = aws_iam_role_policy.development_deploy.policy
+        },
+        {
+          environment = "production"
+          policy      = aws_iam_role_policy.production_deploy.policy
+        },
+        ] : alltrue([
+          for statement in jsondecode(access.policy).Statement :
+          statement.Effect != "Allow" || !anytrue([
+            for action in try(tolist(statement.Action), [statement.Action]) :
+            action == "*" || startswith(lower(action), "iam:")
+            ]) || alltrue([
+            for resource in try(tolist(statement.Resource), [statement.Resource]) :
+            resource == "arn:aws:iam::198771014193:role/voice-checklist-${access.environment}-*"
+          ])
+      ])
+    ])
+    error_message = "Deployment-role IAM grants must stay within that environment's runtime-role ARN pattern."
   }
 }
 

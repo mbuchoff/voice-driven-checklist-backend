@@ -9,9 +9,10 @@ import { describe, expect, it } from 'vitest';
 const stepSchema = z
   .object({
     if: z.string().optional(),
-    env: z.record(z.string(), z.string()).optional(),
+    env: z.record(z.string(), z.unknown()).optional(),
     name: z.string().optional(),
     run: z.string().optional(),
+    shell: z.string().optional(),
     uses: z.string().optional(),
     with: z.record(z.string(), z.unknown()).optional(),
   })
@@ -22,6 +23,8 @@ const jobSchema = z
     environment: z.union([z.string(), z.object({ name: z.string() }).loose()]).optional(),
     if: z.string().optional(),
     needs: z.union([z.string(), z.array(z.string())]).optional(),
+    name: z.string().optional(),
+    strategy: z.unknown().optional(),
     permissions: z.record(z.string(), z.string()).optional(),
     steps: z.array(stepSchema),
   })
@@ -68,23 +71,30 @@ describe('GitHub Actions policy', () => {
     expect(usedActions(configuration).join('\n')).not.toContain('upload-artifact');
   });
 
-  it.each(['success', 'failure', 'cancelled', 'skipped'])(
-    'makes the required plan check fail closed when infrastructure result is %s',
+  it('runs the required result gate unconditionally without credentials or checkout', async () => {
+    const configuration = await workflow('infrastructure-plan');
+    const gate = configuration.jobs.plan;
+
+    // These assertions cover GitHub wiring, not locally simulated scheduling.
+    expect([gate?.needs].flat()).toEqual(['plan-infrastructure']);
+    expect(gate?.if?.replace(/\s/g, '').replace(/^\$\{\{(.*)\}\}$/, '$1')).toBe('always()');
+    expect(gate?.permissions).toEqual({});
+    expect(gate?.['continue-on-error'] ?? false).toBe(false);
+    expect(gate?.environment).toBeUndefined();
+    expect(gate?.steps.flatMap((step) => step.uses ?? [])).toEqual([]);
+    const step = gate?.steps.find((entry) => entry.env?.PLAN_RESULT !== undefined);
+    expect(step?.env?.PLAN_RESULT).toBe('${{ needs.plan-infrastructure.result }}');
+    expect(step?.shell).toBe('bash');
+    expect(step?.['continue-on-error'] ?? false).toBe(false);
+  });
+
+  it.each(['success', 'failure', 'cancelled', 'skipped', ''])(
+    'accepts only success from the supplied result input %j',
     async (result) => {
       const configuration = await workflow('infrastructure-plan');
-      const gate = configuration.jobs.plan;
-
-      // GitHub accepts skipped required checks. Keep the credential-bearing job
-      // fork-guarded, but evaluate its result in an unconditional, unprivileged job.
-      expect(gate?.needs).toBe('plan-infrastructure');
-      expect(gate?.if).toBe('${{ always() }}');
-      expect(gate?.permissions).toEqual({});
-      expect(gate?.environment).toBeUndefined();
-      expect(gate?.steps).toHaveLength(1);
-      const step = gate?.steps[0];
-      expect(step?.env?.PLAN_RESULT).toBe('${{ needs.plan-infrastructure.result }}');
-      expect(step?.run).toBeDefined();
-      const execution = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step?.run ?? ''], {
+      const step = configuration.jobs.plan?.steps.find((entry) => entry.env?.PLAN_RESULT !== undefined);
+      const script = z.string().min(1).parse(step?.run);
+      const execution = spawnSync('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', script], {
         encoding: 'utf8',
         env: { PATH: process.env.PATH, PLAN_RESULT: result },
       });
@@ -92,6 +102,31 @@ describe('GitHub Actions policy', () => {
       expect(execution.status).toBe(result === 'success' ? 0 : 1);
     },
   );
+
+  it('requires the published PR test and result-gate names in the main ruleset', async () => {
+    const ruleset = z.object({
+      rules: z.array(z.object({ type: z.string(), parameters: z.unknown().optional() })),
+    }).parse(JSON.parse(await readFile(resolve('infra/github/main.ruleset.json'), 'utf8')));
+    const requiredChecks = z.object({
+      required_status_checks: z.array(z.object({ context: z.string() })),
+    }).parse(ruleset.rules.find((rule) => rule.type === 'required_status_checks')?.parameters);
+
+    const publishedNames = await Promise.all(
+      ([['ci', 'test'], ['infrastructure-plan', 'plan']] as const).map(async ([name, jobId]) => {
+        const configuration = await workflow(name);
+        const job = configuration.jobs[jobId];
+        expect(configuration.on, `${name}: PR trigger`).toHaveProperty('pull_request');
+        expect(job, `${name}/${jobId}: required job`).toBeDefined();
+        // Matrix/expressions need actual GitHub check-identity verification.
+        expect(job?.strategy, `${name}/${jobId}: static check name`).toBeUndefined();
+        const publishedName = job?.name ?? jobId;
+        expect(publishedName, `${name}/${jobId}: literal check name`).not.toContain('${{');
+        return publishedName;
+      }),
+    );
+    expect(requiredChecks.required_status_checks.map((check) => check.context).sort())
+      .toEqual(publishedNames.sort());
+  });
 
   it.each(['infrastructure-plan', 'deploy-development'])(
     'pipes every plan directly to the policy checker in %s',
@@ -119,11 +154,13 @@ describe('GitHub Actions policy', () => {
     },
   );
 
-  it.each(['infrastructure-plan', 'deploy-development'])(
-    'checks out and installs trusted policy only after candidate execution in %s',
-    async (name) => {
+  it.each([['infrastructure-plan', 'plan-infrastructure'], ['deploy-development', 'deploy']])(
+    'checks out and installs trusted policy only after candidate execution in %s/%s',
+    async (name, jobId) => {
       const configuration = await workflow(name);
-      const steps = Object.values(configuration.jobs).flatMap((job) => job.steps);
+      const job = configuration.jobs[jobId];
+      expect(job, `${name}/${jobId}: policy-bearing job`).toBeDefined();
+      const steps = job?.steps ?? [];
       const policyCheckout = steps.findIndex((step) =>
         step.name?.includes('trusted policy') ||
         step.name?.includes('main-owned deployment policy'),

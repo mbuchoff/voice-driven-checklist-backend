@@ -5,10 +5,10 @@
 `infrastructure-plan.yml` publishes the required `plan` check for every pull
 request. Its credential-bearing `plan-infrastructure` job runs only when the pull
 request head belongs to this repository and the repository owner approves its
-`infrastructure-plan` environment. The AWS role independently restricts assumption to that immutable
-owner ID. The workflow checks out the candidate separately from the current
-`main` branch's trusted policy implementation and manifests. PR #1 alone falls
-back to its candidate policy because the minimal `main` branch predates the
+`infrastructure-plan` environment. The AWS role independently restricts assumption
+to that immutable owner ID. The workflow checks out the candidate separately from
+the current `main` branch's trusted policy implementation and manifests. PR #1
+alone falls back to its candidate policy because the minimal `main` predates the
 policy; every later pull request fails closed when `main` lacks the policy.
 Candidate build and plan commands finish before the trusted checkout occurs.
 
@@ -24,7 +24,12 @@ skipping AWS work. Review a fork contribution and bring it onto a trusted branch
 before running infrastructure validation; do not give forks OIDC access or switch
 this workflow to `pull_request_target`.
 
-### Main protection
+This retained credential-release gate applies to every PR, including docs-only
+changes: the owner approves the environment before planning can complete. Do not
+add trigger-level path filters; a workflow that never runs cannot report its
+required result. Do not turn skipped AWS validation into a successful `plan`.
+
+## Main protection
 
 The reviewed REST payload is [main.ruleset.json](../infra/github/main.ruleset.json).
 It requires a PR and current, up-to-date `test` and `plan` checks from the GitHub
@@ -36,9 +41,8 @@ a review gate that the repository's sole owner cannot satisfy.
 
 The payload is not applied by a workflow. After explicit ruleset authorization:
 
-1. Re-read current rulesets and main protection. On 2026-09-08 there were no
-   rulesets; stop and reconcile if another policy now exists rather than adding
-   duplicates or overwriting it.
+1. Re-read current rulesets and main protection. Stop and reconcile if another
+   policy already exists rather than adding duplicates or overwriting it.
 2. Ensure the fail-closed `plan` wrapper is present in the candidate and main, and
    check actual PR check names and GitHub App IDs. A skipped or neutral required
    check is accepted by GitHub, so the old skipped job is not sufficient.
@@ -57,7 +61,7 @@ not be a required PR check. Ruleset changes never authorize a merge.
 References: [GitHub required checks](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches#require-status-checks-before-merging)
 and [ruleset API](https://docs.github.com/en/rest/repos/rules#create-a-repository-ruleset).
 
-### Deployment-role refresh permissions
+## Deployment-role refresh permissions
 
 Development run [33067430555](https://github.com/mbuchoff/voice-driven-checklist-backend/actions/runs/33067430555)
 failed because the AWS provider calls `iam:ListAttachedRolePolicies` when refreshing
@@ -77,8 +81,8 @@ bootstrap apply from GitHub or bypass review with an ad-hoc IAM patch. After app
 verify the intended role policies and run the approved development workflow from
 main and a selected immutable ref, retaining its existing artifact/alias/live
 invocation evidence. If another permission fails, investigate that exact failure;
-do not infer a broad grant from this fix. Until those runs pass, GH-28 foundation
-repair and the GH-29 runtime gate remain incomplete.
+do not infer a broad grant from this fix. Both runs must pass before deployment-role
+verification is complete; record their results separately from this runbook.
 
 ## Development deployment
 

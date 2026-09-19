@@ -117,6 +117,7 @@ jobs:
 
   # A skipped check satisfies GitHub's required-check policy. Keep AWS access
   # guarded above, and publish the required result without checkout or credentials.
+  # The job ID "plan" is the stable required-check name in main.ruleset.json.
   plan:
     needs: plan-infrastructure
     if: ${{ always() }}
@@ -124,6 +125,7 @@ jobs:
     permissions: {}
     steps:
       - name: Require successful infrastructure validation
+        shell: bash
         env:
           PLAN_RESULT: ${{ needs.plan-infrastructure.result }}
         run: |
