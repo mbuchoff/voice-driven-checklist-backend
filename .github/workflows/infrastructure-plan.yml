@@ -12,8 +12,7 @@ concurrency:
 
 jobs:
   plan-infrastructure:
-    # Disposable protection probe: deliberately skip planning; never merge this commit.
-    if: github.event.pull_request.head.repo.full_name == github.repository && false
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     environment: infrastructure-plan
     permissions:
