@@ -8,7 +8,7 @@ export default tseslint.config(
     files: ['**/*.ts'],
   })),
   {
-    ignores: ['coverage/**', 'dist/**'],
+    ignores: ['.argue-with/**', 'coverage/**', 'dist/**', 'spikes/powersync/**'],
   },
   {
     files: ['**/*.ts'],

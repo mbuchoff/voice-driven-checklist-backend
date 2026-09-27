@@ -162,9 +162,13 @@ jobs:
           function_name=$(tofu -chdir=infra/aws/backend output -raw function_name)
           alias=$(aws lambda get-alias --function-name "$function_name" --name active)
           function_version=$(jq -r .FunctionVersion <<< "$alias")
+          runtime_secret_version=$(tofu -chdir=infra/aws/backend output -raw runtime_secret_version)
           configuration=$(aws lambda get-function-configuration \
             --function-name "$function_name" \
             --qualifier "$function_version")
+          jq -e --arg version "$runtime_secret_version" \
+            '.Environment.Variables.RUNTIME_SECRET_VERSION == $version' \
+            <<< "$configuration" >/dev/null
           printf '%s' "$configuration" > /tmp/lambda-configuration.json
           printf '%s' "$alias" > /tmp/lambda-alias.json
           ../policy/node_modules/.bin/tsx \
@@ -183,6 +187,18 @@ jobs:
             /tmp/lambda-response.json >/dev/null
           jq -e '.statusCode == 200 and (.body | fromjson | .status == "ok")' \
             /tmp/lambda-response.json >/dev/null
+          api_endpoint=$(tofu -chdir=infra/aws/backend output -raw api_endpoint)
+          curl --fail --silent --show-error "$api_endpoint/health" \
+            | jq -e '.status == "ok"' >/dev/null
+          curl --fail --silent --show-error "$api_endpoint/.well-known/jwks.json" \
+            | jq -e '.keys | length >= 1 and all(.[]; .kty == "RSA" and .alg == "RS256" and (.kid | length > 0) and (has("d") | not))' >/dev/null
+          credential_status=$(curl --silent --show-error \
+            --output /tmp/credential-response.json \
+            --write-out '%{http_code}' \
+            --request POST \
+            "$api_endpoint/v1/powersync/credentials")
+          [[ "$credential_status" == "401" ]]
+          jq -e '.code == "invalid_access_token"' /tmp/credential-response.json >/dev/null
       - name: Mark deployment successful
         env:
           GH_TOKEN: ${{ github.token }}

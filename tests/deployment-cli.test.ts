@@ -62,7 +62,32 @@ describe('infrastructure policy command', () => {
     'infra/aws/backend',
   ];
   const destructivePlan = JSON.stringify({
+    planned_values: {
+      outputs: {
+        runtime_secret_version: { value: 42 },
+      },
+      root_module: {
+        resources: [{
+          address: 'aws_lambda_function.placeholder[0]',
+          values: {
+            environment: [{
+              variables: { RUNTIME_SECRET_VERSION: '42' },
+            }],
+          },
+        }],
+      },
+    },
     resource_changes: [
+      {
+        address: 'aws_apigatewayv2_api.backend[0]',
+        change: { actions: ['no-op'] },
+        mode: 'managed',
+      },
+      {
+        address: 'aws_cloudwatch_log_group.api[0]',
+        change: { actions: ['no-op'] },
+        mode: 'managed',
+      },
       {
         address: 'aws_cloudwatch_log_group.placeholder[0]',
         change: { actions: ['no-op'] },

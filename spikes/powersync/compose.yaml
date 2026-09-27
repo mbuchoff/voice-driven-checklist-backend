@@ -1,0 +1,17 @@
+# Isolated local proof inside the shared devcontainer. No cloud deployment.
+name: gh29-powersync-proof
+services:
+  mongo:
+    image: mongo:8.0.13
+    network_mode: "container:${SPIKE_NETWORK_CONTAINER:?Set the current devcontainer name}"
+    command: ["mongod", "--replSet", "gh29", "--bind_ip", "127.0.0.1", "--port", "27018"]
+    volumes:
+      - mongo-data:/data/db
+  powersync:
+    build: .
+    network_mode: "container:${SPIKE_NETWORK_CONTAINER:?Set the current devcontainer name}"
+    environment:
+      POWERSYNC_CONFIG_PATH: /proof/service.yaml
+      PS_PROOF_STORAGE_URI: "${PS_PROOF_STORAGE_URI:-mongodb://127.0.0.1:27018/powersync_proof?replicaSet=gh29}"
+volumes:
+  mongo-data:

@@ -166,11 +166,125 @@ run "environment_isolation_contract" {
   }
 
   assert {
+    condition = (
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "CreateDevelopmentHttpApi" &&
+        statement.Action == "apigateway:POST" &&
+        statement.Resource == "arn:aws:apigateway:us-east-1::/apis" &&
+        try(statement.Condition.StringEquals["apigateway:Request/ApiName"], "") == "voice-checklist-development-api" &&
+        try(statement.Condition.StringEquals["aws:RequestTag/Environment"], "") == "development"
+      ]) &&
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "ManageDevelopmentHttpApi" &&
+        toset(try(tolist(statement.Action), [statement.Action])) == toset([
+          "apigateway:PATCH",
+          "apigateway:POST",
+          "apigateway:PUT",
+        ]) &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Environment"], "") == "development"
+      ]) &&
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "DeleteDevelopmentHttpApiChildren" &&
+        statement.Action == "apigateway:DELETE" &&
+        statement.Resource == "arn:aws:apigateway:us-east-1::/apis/*/*" &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Environment"], "") == "development"
+      ])
+    )
+    error_message = "Development HTTP API writes must require the exact API name/request tag or an existing Development resource tag, and API deletion itself must stay denied."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !contains(try(tolist(statement.Action), [statement.Action]), "apigateway:*") &&
+      !(contains(try(tolist(statement.Action), [statement.Action]), "apigateway:DELETE") &&
+      contains(try(tolist(statement.Resource), [statement.Resource]), "arn:aws:apigateway:us-east-1::/apis/*"))
+    ])
+    error_message = "Development deployment must not receive wildcard API Gateway actions or permission to delete an API."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_policy.deployment_boundary.policy).Statement :
+      statement.Sid == "DenyApplicationApiDeletion" &&
+      statement.Effect == "Deny" &&
+      statement.Action == "apigateway:DELETE" &&
+      try(statement.NotResource, "") == "arn:aws:apigateway:us-east-1::/apis/*/*" &&
+      try(statement.Condition.StringLike["apigateway:Resource/ApiName"], "") == "voice-checklist-*"
+    ])
+    error_message = "The deployment boundary must deny deletion of retained Voice Checklist APIs while allowing child-route replacement."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !strcontains(jsonencode(try(statement.Resource, "")), "%2Fv2%2Fapis")
+    ])
+    error_message = "API tag resources must encode the actual /apis ARN, not the HTTP API's /v2 request prefix."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      statement.Sid == "ConfigureDevelopmentApiLogDelivery" &&
+      statement.Resource == "*" &&
+      toset(try(tolist(statement.Action), [statement.Action])) == toset([
+        "logs:CreateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:DescribeResourcePolicies",
+        "logs:GetLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutResourcePolicy",
+        "logs:UpdateLogDelivery",
+      ])
+    ])
+    error_message = "Development HTTP API deployment must include the account-level CloudWatch Logs delivery permissions required by AWS."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.production_deploy.policy).Statement :
+      !strcontains(jsonencode(statement.Action), "apigateway:") &&
+      !strcontains(jsonencode(statement.Action), "ssm:") &&
+      !strcontains(jsonencode(statement.Action), "logs:CreateLogDelivery") &&
+      !strcontains(jsonencode(statement.Action), "logs:PutResourcePolicy")
+    ])
+    error_message = "GH-29 must not expand the production deployment role for the Development HTTP API or its log delivery."
+  }
+
+  assert {
+    condition = (
+      anytrue([
+        for statement in jsondecode(aws_iam_policy.runtime_boundary["development"].policy).Statement :
+        statement.Sid == "ReadEnvironmentRuntimeSecret" &&
+        statement.Action == "ssm:GetParameter" &&
+        statement.Resource == "arn:aws:ssm:us-east-1:198771014193:parameter/voice-checklist/development/runtime"
+      ]) &&
+      alltrue([
+        for statement in jsondecode(aws_iam_policy.runtime_boundary["production"].policy).Statement :
+        !strcontains(jsonencode(statement.Action), "ssm:")
+      ])
+    )
+    error_message = "Only the development runtime may read its exact pre-seeded runtime secret."
+  }
+
+  assert {
     condition = alltrue([
       for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
       !strcontains(jsonencode(statement.Resource), "voice-checklist-production-")
     ])
     error_message = "The development deployment role must not address production application resources."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !strcontains(jsonencode(statement.Action), "ssm:")
+    ])
+    error_message = "Only the runtime role may read the encrypted application secret."
   }
 
   assert {
@@ -325,9 +439,9 @@ run "production_cognito_delete_deny_contract" {
     condition = anytrue([
       for statement in jsondecode(aws_iam_policy.deployment_boundary.policy).Statement :
       statement.Effect == "Deny" &&
-      contains(statement.Action, "iam:PutRolePolicy") &&
-      contains(statement.Action, "iam:AttachRolePolicy") &&
-      contains(statement.Action, "iam:PutRolePermissionsBoundary")
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:PutRolePolicy") &&
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:AttachRolePolicy") &&
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:PutRolePermissionsBoundary")
     ])
     error_message = "The boundary must deny GitHub roles the ability to rewrite their policies or boundary."
   }

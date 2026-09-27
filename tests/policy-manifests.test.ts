@@ -75,4 +75,21 @@ describe('protected-resource manifests', () => {
       development.lifecycleBlocks,
     );
   });
+
+  it('protects every persistent Development backend plan address', async () => {
+    const development = parsePolicyManifest(
+      JSON.parse(
+        await readFile(
+          resolve('infra/policy/backend-development.json'),
+          'utf8',
+        ),
+      ),
+    );
+
+    expect(development.planAddresses).toEqual([
+      'aws_apigatewayv2_api.backend[0]',
+      'aws_cloudwatch_log_group.api[0]',
+      'aws_cloudwatch_log_group.placeholder[0]',
+    ]);
+  });
 });

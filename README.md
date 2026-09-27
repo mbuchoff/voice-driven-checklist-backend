@@ -3,11 +3,11 @@
 Serverless backend infrastructure and application code for
 [Voice-Driven Checklist](https://github.com/mbuchoff/voice-driven-checklist).
 
-This repository exclusively owns the AWS authentication and backend state. The
-current runtime is a harmless development-only Lambda placeholder. Issue
-[#29](https://github.com/mbuchoff/voice-driven-checklist/issues/29) will define
-the first sync API, data model, and `/v1` contract; this foundation deliberately
-publishes no API routes or event types.
+This repository exclusively owns the AWS authentication and backend state.
+Issue [#29](https://github.com/mbuchoff/voice-driven-checklist/issues/29) adds
+the MongoDB/PowerSync checklist-definition synchronization backend. The first
+runtime slice validates Cognito access tokens and exchanges them for
+account-scoped, five-minute PowerSync credentials.
 
 ## Local development
 
@@ -24,10 +24,11 @@ npm run package:artifact
 tofu fmt -check -recursive infra
 ```
 
-`npm run build` bundles `src/handler.ts` and generates valid empty OpenAPI and
-event-catalog documents under the ignored `dist/` directory. Runtime
-TypeScript schemas in `src/contracts/` are the contract source of truth; the
-first route and event schemas belong to #29.
+`npm run build` bundles `src/handler.ts` and generates the OpenAPI document
+under the ignored `dist/` directory.
+Runtime TypeScript schemas in `src/contracts/` are the contract source of
+truth. The current OpenAPI document contains the public JWKS and authenticated
+PowerSync credential routes.
 
 Each OpenTofu root also has offline provider-mocked tests:
 
@@ -46,7 +47,7 @@ done
 | `infra/aws/bootstrap` | `voice-checklist/bootstrap.tfstate` | Manual-only GitHub OIDC, roles, and permissions boundaries |
 | `infra/aws/auth` development | `voice-checklist/auth/development.tfstate` | Existing development Cognito and Google credential metadata |
 | `infra/aws/auth` production | `voice-checklist/auth/production.tfstate` | Existing production Cognito and Google credential metadata |
-| `infra/aws/backend` development | `voice-checklist/backend/development.tfstate` | Development compute, roles, and logs |
+| `infra/aws/backend` development | `voice-checklist/backend/development.tfstate` | Development HTTP API, compute, roles, and logs |
 | `infra/aws/backend` production | `voice-checklist/backend/production.tfstate` | Independent production configuration; no Lambda baseline yet |
 
 All keys use the pre-existing private, versioned, encrypted bucket
@@ -79,19 +80,21 @@ verification details.
 ## Secrets
 
 GitHub stores no AWS or third-party credentials. Actions use short-lived GitHub
-OIDC sessions. Each independently authorized credential gets an
-environment/purpose-scoped AWS Secrets Manager resource; unrelated credentials
-are not bundled together.
+OIDC sessions. Deployment credentials use environment/purpose-scoped AWS
+Secrets Manager resources; the backend reads its MongoDB password and PowerSync
+private signing JWK from one pre-seeded, environment-scoped SSM SecureString.
+OpenTofu manages only that parameter's name and narrowly scoped read policy, not
+its value.
 
 The auth stack owns only metadata for these values:
 
 - `voice-checklist/development/deployment/google-oauth`
 - `voice-checklist/production/deployment/google-oauth`
 
-Their values are seeded and rotated outside OpenTofu. The stack reads the
+Their values are seeded and rotated outside OpenTofu. The auth stack reads the
 selected value during deployment because Cognito requires the Google secret in
-its provider configuration. Future runtime secrets are passed to Lambda by ARN
-or name and read by the execution role at runtime.
+its provider configuration. Runtime details and the non-secret parameter shape
+are documented in [PowerSync authentication](docs/powersync-authentication.md).
 
 ## License
 

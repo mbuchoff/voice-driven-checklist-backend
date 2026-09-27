@@ -1,0 +1,12 @@
+config:
+  edition: 3
+
+# Disposable source collection for the Cloud connectivity proof. The production
+# checklist definition, owner fence and tombstone projection are still unbuilt.
+streams:
+  gh29_owned_proof:
+    auto_subscribe: true
+    query: |
+      SELECT _id AS id, owner_id, content
+      FROM gh29_cloud_checklists
+      WHERE owner_id = auth.user_id()

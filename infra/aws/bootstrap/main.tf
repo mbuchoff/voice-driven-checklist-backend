@@ -91,6 +91,7 @@ locals {
   ]
 
   plan_permissions = [
+    "apigateway:GET",
     "cognito-idp:Describe*",
     "cognito-idp:Get*",
     "cognito-idp:List*",
@@ -132,6 +133,19 @@ resource "aws_iam_policy" "deployment_boundary" {
         Resource = "*"
       },
       {
+        Sid    = "DenyApplicationApiDeletion"
+        Effect = "Deny"
+        Action = "apigateway:DELETE"
+        # IAM wildcards cross path separators. Exclude every API child resource
+        # from this deny so route/integration/stage replacement remains possible.
+        NotResource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*/*"
+        Condition = {
+          StringLike = {
+            "apigateway:Resource/ApiName" = "voice-checklist-*"
+          }
+        }
+      },
+      {
         Sid    = "DenyApplicationObjectDeletion"
         Effect = "Deny"
         Action = [
@@ -169,7 +183,7 @@ resource "aws_iam_policy" "runtime_boundary" {
   description = "Maximum permissions for Voice Checklist ${each.key} runtime roles"
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid    = "WriteEnvironmentLambdaLogs"
         Effect = "Allow"
@@ -179,7 +193,14 @@ resource "aws_iam_policy" "runtime_boundary" {
         ]
         Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-${each.key}-*:log-stream:*"
       },
-    ]
+      ], each.key == "development" ? [
+      {
+        Sid      = "ReadEnvironmentRuntimeSecret"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/voice-checklist/development/runtime"
+      },
+    ] : [])
   })
 }
 
@@ -325,6 +346,18 @@ locals {
     "logs:UntagResource",
   ]
 
+  # AWS vended-log delivery control-plane actions do not support resource-level
+  # permissions. Keep this exceptional account-wide set Development-only.
+  api_log_delivery_actions = [
+    "logs:CreateLogDelivery",
+    "logs:DeleteLogDelivery",
+    "logs:DescribeResourcePolicies",
+    "logs:GetLogDelivery",
+    "logs:ListLogDeliveries",
+    "logs:PutResourcePolicy",
+    "logs:UpdateLogDelivery",
+  ]
+
   deployment_secret_read_actions = [
     "secretsmanager:DescribeSecret",
     "secretsmanager:GetResourcePolicy",
@@ -388,10 +421,69 @@ locals {
         Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-development-*"
       },
       {
-        Sid      = "ManageDevelopmentLogGroups"
+        Sid    = "ManageDevelopmentLogGroups"
+        Effect = "Allow"
+        Action = local.log_group_management_actions
+        Resource = [
+          "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/apigateway/voice-checklist-development-*",
+          "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*",
+        ]
+      },
+      {
+        Sid    = "ReadRegionalHttpApis"
+        Effect = "Allow"
+        Action = "apigateway:GET"
+        Resource = [
+          "arn:${local.partition}:apigateway:${var.aws_region}::/apis*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fapis%2F*",
+        ]
+      },
+      {
+        Sid      = "CreateDevelopmentHttpApi"
         Effect   = "Allow"
-        Action   = local.log_group_management_actions
-        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*"
+        Action   = "apigateway:POST"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis"
+        Condition = {
+          StringEquals = {
+            "apigateway:Request/ApiName" = "voice-checklist-development-api"
+            "aws:RequestTag/Environment" = "development"
+          }
+        }
+      },
+      {
+        Sid    = "ManageDevelopmentHttpApi"
+        Effect = "Allow"
+        Action = [
+          "apigateway:PATCH",
+          "apigateway:POST",
+          "apigateway:PUT",
+        ]
+        Resource = [
+          "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fapis%2F*",
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/Environment" = "development"
+          }
+        }
+      },
+      {
+        Sid      = "DeleteDevelopmentHttpApiChildren"
+        Effect   = "Allow"
+        Action   = "apigateway:DELETE"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*/*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/Environment" = "development"
+          }
+        }
+      },
+      {
+        Sid      = "ConfigureDevelopmentApiLogDelivery"
+        Effect   = "Allow"
+        Action   = local.api_log_delivery_actions
+        Resource = "*"
       },
       {
         Sid      = "CreateDevelopmentRuntimeRoles"

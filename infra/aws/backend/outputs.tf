@@ -7,3 +7,18 @@ output "active_alias" {
   description = "Active Lambda alias; null before an environment has a runtime baseline."
   value       = local.deploy_runtime ? one(aws_lambda_alias.active).name : null
 }
+
+output "api_endpoint" {
+  description = "Development HTTP API endpoint; null before an environment has a runtime baseline."
+  value       = local.deploy_runtime ? one(aws_apigatewayv2_api.backend).api_endpoint : null
+}
+
+output "powersync_jwks_uri" {
+  description = "Public JWKS URI for PowerSync custom authentication."
+  value       = local.deploy_runtime ? "${one(aws_apigatewayv2_api.backend).api_endpoint}/.well-known/jwks.json" : null
+}
+
+output "runtime_secret_version" {
+  description = "Numeric SSM SecureString version pinned into the active Lambda release."
+  value       = local.deploy_runtime ? var.runtime_secret_version : null
+}

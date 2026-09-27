@@ -20,6 +20,7 @@ const stepSchema = z
 
 const jobSchema = z
   .object({
+    env: z.record(z.string(), z.unknown()).optional(),
     environment: z.union([z.string(), z.object({ name: z.string() }).loose()]).optional(),
     if: z.string().optional(),
     needs: z.union([z.string(), z.array(z.string())]).optional(),
@@ -252,6 +253,31 @@ describe('GitHub Actions policy', () => {
 
     expect(runs(deployment)).not.toContain('npm audit');
     expect(runs(continuousIntegration)).toContain('npm audit');
+  });
+
+  it('typechecks and exercises the committed PowerSync proof in CI', async () => {
+    const commands = runs(await workflow('ci'));
+
+    expect(commands).toContain('npm --prefix spikes/powersync ci');
+    expect(commands).toContain('npm --prefix spikes/powersync run typecheck');
+    expect(commands).toContain('npm --prefix spikes/powersync run test:ci');
+    expect(commands).toContain('npm --prefix spikes/powersync audit');
+  });
+
+  it('verifies the runtime-secret version pinned by the reviewed environment config', async () => {
+    const deployment = await workflow('deploy-development');
+    const commands = runs(deployment);
+
+    expect(commands).toContain('output -raw runtime_secret_version');
+    expect(commands).toContain('.Environment.Variables.RUNTIME_SECRET_VERSION == $version');
+    expect(commands).not.toContain('aws ssm get-parameter');
+  });
+
+  it('smoke-tests the unauthenticated credential response shape', async () => {
+    const commands = runs(await workflow('deploy-development'));
+
+    expect(commands).toContain('/v1/powersync/credentials');
+    expect(commands).toContain('invalid_access_token');
   });
 
   it('retains the exact development artifact for the accepted 90-day window', async () => {

@@ -1,0 +1,16 @@
+telemetry:
+  disable_telemetry_sharing: true
+replication:
+  connections:
+    - type: mongodb
+      uri: mongodb://127.0.0.1:27018/checklist_proof?replicaSet=gh29
+      post_images: read_only
+storage:
+  type: mongodb
+  uri: !env PS_PROOF_STORAGE_URI
+port: 8011
+sync_config:
+  path: /proof/sync-config.yaml
+client_auth:
+  jwks_uri: http://127.0.0.1:8012/jwks
+  audience: [gh29-local-proof]

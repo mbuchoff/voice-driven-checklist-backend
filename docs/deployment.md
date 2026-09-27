@@ -101,11 +101,14 @@ so automatic `main` deployment is not blocked. The workflow:
 3. creates one Lambda zip and records its hexadecimal and base64 SHA-256;
 4. uploads that exact zip as a GitHub Actions artifact for 90 days;
 5. creates a GitHub Deployment tied to the selected commit and artifact ID;
-6. generates one saved plan under `/tmp`, applies the exact saved plan, and
+6. plans the numeric runtime-secret version recorded in the reviewed environment
+   configuration without granting the deployment role secret-read access;
+7. generates one saved plan under `/tmp`, applies the exact saved plan, and
    discards it with the runner;
-7. verifies Lambda `CodeSha256`, the published version description, the active
-   alias commit/artifact description, and a live invocation;
-8. marks the GitHub Deployment successful or failed.
+8. verifies Lambda `CodeSha256`, the published version description, the active
+   alias commit/artifact description, the pinned secret version, a live invocation,
+   HTTP health, public JWKS, and the unauthenticated credential error contract;
+9. marks the GitHub Deployment successful or failed.
 
 The Lambda function carries stable `Application`, `Environment`, `ManagedBy`,
 and `Repository` tags. Published versions inherit a description containing the
@@ -117,7 +120,8 @@ contains the commit and Lambda zip digest.
 Persistent resource delete, replace, forget, missing, and first-create actions
 always fail once an address is in the main manifest. The deployment permissions
 boundary also denies deletion of Cognito, tables, queues, Secrets Manager
-secrets, log groups, KMS keys, databases, and environment-prefixed S3 data.
+secrets, log groups, KMS keys, databases, retained Voice Checklist APIs, and
+environment-prefixed S3 data.
 
 Reconstructable compute or configuration can be deleted or replaced only when
 a manual selected-ref run explicitly enables `allow_reconstructable_destroy`.
@@ -130,9 +134,15 @@ To roll back development, select a previously verified Git commit and rebuild
 its artifact deterministically through the main-owned workflow. Never move the
 alias to an unverified version by hand.
 
+The first commit that records `runtime_secret_version` in the Development
+configuration is the rollback floor. The workflow rejects older commits before
+apply because they cannot bind their signing-key ID to an immutable secret
+revision. Choose a previously verified version-pinned commit instead.
+
 GitHub Actions artifacts expire after 90 days. An expired artifact is not a
 promotion candidate: rebuild from the selected commit, deploy it to development,
 and repeat digest and live-invocation verification before any later promotion.
 
-Issue #29 establishes the first production runtime baseline. Issue #32 owns
-post-baseline breaking-contract and previous-client compatibility enforcement.
+Issue #29 establishes a production-capable runtime baseline without applying it
+to Production. Issue #32 owns the first Production apply plus breaking-contract
+and previous-client compatibility enforcement.

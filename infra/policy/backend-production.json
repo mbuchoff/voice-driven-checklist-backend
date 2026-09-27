@@ -1,6 +1,8 @@
 {
   "environment": "production",
   "lifecycleBlocks": [
+    "aws_apigatewayv2_api.backend",
+    "aws_cloudwatch_log_group.api",
     "aws_cloudwatch_log_group.placeholder"
   ],
   "planAddresses": [],

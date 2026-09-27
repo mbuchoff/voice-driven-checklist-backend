@@ -1,0 +1,19 @@
+_type: cloud
+name: Development
+region: us
+
+replication:
+  connections:
+    - type: mongodb
+      uri: mongodb+srv://voicechecklist.0hbva2h.mongodb.net/voice_checklist_dev?authSource=admin
+      username: voice_checklist_sync_dev
+      password:
+        secret: !env GH29_ATLAS_SYNC_PASSWORD
+      database: voice_checklist_dev
+      post_images: read_only
+
+client_auth:
+  jwks_uri: https://3rtgxivb53.execute-api.us-east-1.amazonaws.com/.well-known/jwks.json
+  # Issued credentials use the Development instance endpoint as their audience,
+  # which PowerSync accepts by default without additional_audiences.
+  allow_temporary_tokens: false
