@@ -405,10 +405,13 @@ locals {
         ]
       },
       {
-        Sid      = "ManageDevelopmentHttpApi"
-        Effect   = "Allow"
-        Action   = "apigateway:*"
-        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis*"
+        Sid    = "ManageDevelopmentHttpApi"
+        Effect = "Allow"
+        Action = "apigateway:*"
+        Resource = [
+          "arn:${local.partition}:apigateway:${var.aws_region}::/apis*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
+        ]
       },
       {
         Sid      = "ReadDevelopmentRuntimeSecret"

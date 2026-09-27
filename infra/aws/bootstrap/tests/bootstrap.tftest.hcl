@@ -170,9 +170,12 @@ run "environment_isolation_contract" {
       for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
       statement.Sid == "ManageDevelopmentHttpApi" &&
       statement.Action == "apigateway:*" &&
-      statement.Resource == "arn:aws:apigateway:us-east-1::/apis*"
+      toset(try(tolist(statement.Resource), [statement.Resource])) == toset([
+        "arn:aws:apigateway:us-east-1::/apis*",
+        "arn:aws:apigateway:us-east-1::/tags/arn%3Aaws%3Aapigateway%3Aus-east-1%3A%3A%2Fv2%2Fapis%2F*",
+      ])
     ])
-    error_message = "Development HTTP API management must stay within the regional API resource path."
+    error_message = "Development HTTP API management must cover only the regional API and its encoded tag resource paths."
   }
 
   assert {
