@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseRuntimeConfiguration } from '../src/runtime/configuration.js';
+import {
+  parseRuntimeConfiguration,
+  parseRuntimeSecretLocator,
+} from '../src/runtime/configuration.js';
 
 function environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
@@ -12,6 +15,7 @@ function environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
     POWERSYNC_JWT_ISSUER: 'https://api.example.test',
     POWERSYNC_JWT_KID: 'development-1',
     RUNTIME_SECRET_PARAMETER_NAME: '/voice-checklist/development/runtime',
+    RUNTIME_SECRET_VERSION: '42',
     ...overrides,
   };
 }
@@ -27,6 +31,13 @@ const runtimeSecret = {
 };
 
 describe('runtime configuration', () => {
+  it('pins the runtime secret to one positive numeric parameter version', () => {
+    expect(parseRuntimeSecretLocator(environment())).toEqual({
+      parameterName: '/voice-checklist/development/runtime',
+      version: 42,
+    });
+  });
+
   it('derives the exact Cognito issuer and normalizes the client allowlist', () => {
     const configuration = parseRuntimeConfiguration(environment(), runtimeSecret);
 
@@ -67,8 +78,14 @@ describe('runtime configuration', () => {
     ['a runtime parameter outside the application path', {
       RUNTIME_SECRET_PARAMETER_NAME: '/another-application/development/runtime',
     }],
+    ['an unpinned runtime parameter', { RUNTIME_SECRET_VERSION: '' }],
+    ['a non-numeric runtime parameter version', { RUNTIME_SECRET_VERSION: 'latest' }],
   ])('rejects %s', (_label, override) => {
-    expect(() => parseRuntimeConfiguration(environment(override), runtimeSecret)).toThrow();
+    const candidate = environment(override);
+    expect(() => {
+      parseRuntimeSecretLocator(candidate);
+      parseRuntimeConfiguration(candidate, runtimeSecret);
+    }).toThrow();
   });
 
   it.each([

@@ -12,7 +12,7 @@ interface ParameterStoreClient {
 }
 
 export interface RuntimeSecretReader {
-  read(parameterName: string): Promise<unknown>;
+  read(parameterName: string, version: number): Promise<unknown>;
 }
 
 export function createSsmRuntimeSecretReader(
@@ -20,7 +20,7 @@ export function createSsmRuntimeSecretReader(
   options: { readonly timeoutMs: number } = { timeoutMs: 1_500 },
 ): RuntimeSecretReader {
   return {
-    async read(parameterName) {
+    async read(parameterName, version) {
       const controller = new AbortController();
       const timeout = setTimeout(() => {
         controller.abort();
@@ -28,7 +28,7 @@ export function createSsmRuntimeSecretReader(
       let response: GetParameterCommandOutput;
       try {
         response = await client.send(new GetParameterCommand({
-          Name: parameterName,
+          Name: `${parameterName}:${String(version)}`,
           WithDecryption: true,
         }), { abortSignal: controller.signal });
       } finally {

@@ -17,3 +17,8 @@ output "powersync_jwks_uri" {
   description = "Public JWKS URI for PowerSync custom authentication."
   value       = local.deploy_runtime ? "${one(aws_apigatewayv2_api.backend).api_endpoint}/.well-known/jwks.json" : null
 }
+
+output "runtime_secret_version" {
+  description = "Numeric SSM SecureString version pinned into the active Lambda release."
+  value       = local.deploy_runtime ? var.runtime_secret_version : null
+}

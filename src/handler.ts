@@ -6,7 +6,11 @@ import type {
 import { MongoClient } from 'mongodb';
 import { ZodError } from 'zod';
 
-import { createMongoAccountLifecycleReader } from './accounts/account-lifecycle.js';
+import {
+  accountDeletionLedgerCollectionName,
+  accountLifecycleCollectionName,
+  createMongoAccountLifecycleReader,
+} from './accounts/account-lifecycle.js';
 import {
   InvalidAccessTokenError,
   createCognitoAccessTokenVerifier,
@@ -20,7 +24,7 @@ import {
 } from './auth/powersync-credential-service.js';
 import {
   parseRuntimeConfiguration,
-  parseRuntimeSecretParameterName,
+  parseRuntimeSecretLocator,
 } from './runtime/configuration.js';
 import { createSsmRuntimeSecretReader } from './runtime/runtime-secret.js';
 
@@ -59,11 +63,14 @@ function isHttpEvent(event: unknown): event is APIGatewayProxyEventV2 {
     readonly requestContext?: unknown;
   };
   const requestContext = candidate.requestContext;
+  const http = typeof requestContext === 'object' && requestContext !== null
+    ? (requestContext as { readonly http?: unknown }).http
+    : undefined;
   return (
     typeof candidate.rawPath === 'string' &&
-    typeof requestContext === 'object' &&
-    requestContext !== null &&
-    typeof (requestContext as { readonly http?: unknown }).http === 'object'
+    typeof http === 'object' &&
+    http !== null &&
+    typeof (http as { readonly method?: unknown }).method === 'string'
   );
 }
 
@@ -78,9 +85,22 @@ function bearerToken(event: APIGatewayProxyEventV2): string | undefined {
   return match?.[1];
 }
 
+function staticHttpResponse(
+  event: APIGatewayProxyEventV2,
+): APIGatewayProxyStructuredResultV2 | undefined {
+  return event.requestContext.http.method.toUpperCase() === 'GET' && event.rawPath === '/health'
+    ? json(200, { status: 'ok' })
+    : undefined;
+}
+
 export function createHandler(dependencies: HandlerDependencies): BackendHandler {
   return async (event, context) => {
     void context;
+
+    const staticResponse = staticHttpResponse(event);
+    if (staticResponse !== undefined) {
+      return staticResponse;
+    }
 
     const method = event.requestContext.http.method.toUpperCase();
     if (method === 'GET' && event.rawPath === '/.well-known/jwks.json') {
@@ -113,8 +133,11 @@ export function createHandler(dependencies: HandlerDependencies): BackendHandler
 async function createRuntimeHandler(
   environment: NodeJS.ProcessEnv,
 ): Promise<BackendHandler> {
-  const parameterName = parseRuntimeSecretParameterName(environment);
-  const runtimeSecret = await createSsmRuntimeSecretReader().read(parameterName);
+  const secret = parseRuntimeSecretLocator(environment);
+  const runtimeSecret = await createSsmRuntimeSecretReader().read(
+    secret.parameterName,
+    secret.version,
+  );
   const configuration = parseRuntimeConfiguration(environment, runtimeSecret);
   const mongo = new MongoClient(configuration.mongodb.uri, {
     appName: 'voice-checklist-backend',
@@ -126,12 +149,13 @@ async function createRuntimeHandler(
     maxPoolSize: 10,
     connectTimeoutMS: 1_500,
     serverSelectionTimeoutMS: 1_500,
+    timeoutMS: 2_000,
   });
   const database = mongo.db(configuration.mongodb.database);
   const lifecycle = createMongoAccountLifecycleReader(
     {
-      deletionLedger: database.collection('account_deletion_ledger'),
-      lifecycle: database.collection('account_lifecycle'),
+      deletionLedger: database.collection(accountDeletionLedgerCollectionName),
+      lifecycle: database.collection(accountLifecycleCollectionName),
     },
   );
   const authority = createPowerSyncCredentialAuthority(
@@ -169,19 +193,23 @@ export async function handler(
   event: unknown,
   context: Context,
 ): Promise<APIGatewayProxyStructuredResultV2> {
-  if (
-    !isHttpEvent(event) ||
-    (event.requestContext.http.method.toUpperCase() === 'GET' &&
-      event.rawPath === '/health')
-  ) {
+  if (!isHttpEvent(event)) {
     return json(200, { status: 'ok' });
   }
+
+  const staticResponse = staticHttpResponse(event);
+  if (staticResponse !== undefined) {
+    return staticResponse;
+  }
+
+  let initializedHandler: BackendHandler;
   try {
     runtimeHandler ??= createRuntimeHandler(process.env);
-    return await (await runtimeHandler)(event, context);
+    initializedHandler = await runtimeHandler;
   } catch (error) {
     runtimeHandler = undefined;
     console.error(initializationFailure(error));
     return json(503, { code: 'temporarily_unavailable' });
   }
+  return initializedHandler(event, context);
 }

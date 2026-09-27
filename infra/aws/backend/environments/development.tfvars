@@ -14,7 +14,7 @@ powersync_endpoint   = "https://6aaef0eb02481fb31b97e80b.powersync.journeyapps.c
 powersync_jwt_issuer = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
 powersync_jwt_key_id = "development-1"
 
-runtime_secret_parameter_name = "/voice-checklist/development/runtime"
+runtime_secret_version = 1
 
 cors_allowed_origins = [
   "http://127.0.0.1:4014",

@@ -93,6 +93,16 @@ describe('backend HTTP handler', () => {
     expect(body).not.toContain(sensitiveInput);
   });
 
+  it('serves the published health contract through the injected HTTP router', async () => {
+    const response = await createHandler(dependencies())(
+      event('GET', '/health'),
+      {} as Context,
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body ?? '')).toEqual({ status: 'ok' });
+  });
+
   it('publishes only the PowerSync public signing key', async () => {
     const deps = dependencies();
     const handler = createHandler(deps);

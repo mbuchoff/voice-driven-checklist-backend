@@ -4,7 +4,8 @@ locals {
   deployment_description = "commit ${var.commit_sha}; deployment ${var.deployment_url}"
   alias_description      = "commit ${var.commit_sha}; artifact ${var.artifact_sha256}"
   deploy_runtime         = var.environment == "development"
-  runtime_secret_arn     = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${var.runtime_secret_parameter_name}"
+  runtime_secret_name    = "/voice-checklist/${var.environment}/runtime"
+  runtime_secret_arn     = "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.runtime_secret_name}"
 }
 
 data "aws_caller_identity" "current" {}
@@ -103,7 +104,8 @@ resource "aws_lambda_function" "placeholder" {
       POWERSYNC_ENDPOINT            = var.powersync_endpoint
       POWERSYNC_JWT_ISSUER          = var.powersync_jwt_issuer
       POWERSYNC_JWT_KID             = var.powersync_jwt_key_id
-      RUNTIME_SECRET_PARAMETER_NAME = var.runtime_secret_parameter_name
+      RUNTIME_SECRET_PARAMETER_NAME = local.runtime_secret_name
+      RUNTIME_SECRET_VERSION        = tostring(var.runtime_secret_version)
     }
   }
 

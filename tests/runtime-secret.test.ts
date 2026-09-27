@@ -16,12 +16,12 @@ describe('SSM runtime secret reader', () => {
     } satisfies GetParameterCommandOutput);
     const reader = createSsmRuntimeSecretReader({ send });
 
-    await expect(reader.read('/voice-checklist/development/runtime')).resolves.toEqual({
+    await expect(reader.read('/voice-checklist/development/runtime', 42)).resolves.toEqual({
       mongodb: { username: 'app' },
     });
     expect(send).toHaveBeenCalledOnce();
     expect(send.mock.calls[0]?.[0].input).toEqual({
-      Name: '/voice-checklist/development/runtime',
+      Name: '/voice-checklist/development/runtime:42',
       WithDecryption: true,
     });
   });
@@ -34,7 +34,7 @@ describe('SSM runtime secret reader', () => {
       send: vi.fn().mockResolvedValue(response),
     });
 
-    await expect(reader.read('/voice-checklist/development/runtime')).rejects.toThrow();
+    await expect(reader.read('/voice-checklist/development/runtime', 42)).rejects.toThrow();
   });
 
   it('aborts a parameter read before it can consume the API request budget', async () => {
@@ -48,7 +48,7 @@ describe('SSM runtime secret reader', () => {
     }));
     const reader = createSsmRuntimeSecretReader({ send }, { timeoutMs: 10 });
 
-    await expect(reader.read('/voice-checklist/development/runtime')).rejects.toThrow(
+    await expect(reader.read('/voice-checklist/development/runtime', 42)).rejects.toThrow(
       'aborted',
     );
   });

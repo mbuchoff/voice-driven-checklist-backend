@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import { MongoClient } from 'mongodb';
 
+import { sortedOwners } from './fixture-owners.mjs';
+
 const host = 'voicechecklist.0hbva2h.mongodb.net';
 const database = 'voice_checklist_dev';
 const collectionName = 'gh29_cloud_checklists';
@@ -68,7 +70,7 @@ try {
     const docs = await source.find({}, { projection: { _id: 1, owner_id: 1, fixture: 1 } }).toArray();
     assert.equal(docs.length, 2, 'Unexpected document count; refusing to drop');
     assert(docs.every(value => value.fixture === marker), 'Unexpected document marker; refusing to drop');
-    assert.deepEqual(docs.map(value => value.owner_id).sort(), expectedOwners,
+    assert.deepEqual(sortedOwners(docs.map(value => value.owner_id)), sortedOwners(expectedOwners),
       'Unexpected owner; refusing to drop');
     await source.drop();
     assert.deepEqual(await db.listCollections({ name: collectionName }, { nameOnly: true }).toArray(), []);

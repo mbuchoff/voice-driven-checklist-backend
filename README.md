@@ -24,8 +24,8 @@ npm run package:artifact
 tofu fmt -check -recursive infra
 ```
 
-`npm run build` bundles `src/handler.ts` and generates the version-pinned
-The generated OpenAPI document under the ignored `dist/` directory.
+`npm run build` bundles `src/handler.ts` and generates the OpenAPI document
+under the ignored `dist/` directory.
 Runtime TypeScript schemas in `src/contracts/` are the contract source of
 truth. The current OpenAPI document contains the public JWKS and authenticated
 PowerSync credential routes.

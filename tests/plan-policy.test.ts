@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   findProtectedChangeViolations,
   findReconstructableDestructiveViolations,
+  findRuntimeSecretVersionPinViolations,
   parseOpenTofuPlan,
   parsePolicyManifest,
   type OpenTofuPlan,
@@ -118,6 +119,48 @@ describe('protected OpenTofu plan policy', () => {
     expect(findProtectedChangeViolations(plan, protectedAddresses)).toEqual([
       expect.stringContaining(clientAddress),
     ]);
+  });
+});
+
+describe('runtime-secret version plan policy', () => {
+  function planWithPin(
+    outputVersion: unknown,
+    environmentVersion: unknown,
+  ): unknown {
+    return {
+      planned_values: {
+        outputs: {
+          runtime_secret_version: { value: outputVersion },
+        },
+        root_module: {
+          resources: [{
+            address: 'aws_lambda_function.placeholder[0]',
+            values: {
+              environment: [{
+                variables: {
+                  RUNTIME_SECRET_VERSION: environmentVersion,
+                },
+              }],
+            },
+          }],
+        },
+      },
+    };
+  }
+
+  it('accepts a positive planned version pinned into the Lambda environment', () => {
+    expect(findRuntimeSecretVersionPinViolations(planWithPin(42, '42')))
+      .toEqual([]);
+  });
+
+  it('rejects a pre-pinning plan with no version output', () => {
+    expect(findRuntimeSecretVersionPinViolations({ planned_values: {} }))
+      .toEqual([expect.stringContaining('planned output')]);
+  });
+
+  it('rejects a Lambda version that does not pin the planned secret version', () => {
+    expect(findRuntimeSecretVersionPinViolations(planWithPin(42, '41')))
+      .toEqual([expect.stringContaining('must match')]);
   });
 });
 

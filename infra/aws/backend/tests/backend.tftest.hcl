@@ -26,22 +26,22 @@ mock_provider "aws" {
 }
 
 variables {
-  artifact_digest               = "ASNFZ4mrze8BI0VniavN7wJEn06J1JtAAAS01jL84Vg="
-  artifact_sha256               = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-  artifact_path                 = "tests/fixtures/placeholder.zip"
-  aws_region                    = "us-east-1"
-  cognito_client_ids            = ["android-client", "web-client"]
-  cognito_user_pool_id          = "us-east-1_06KAQuIlH"
-  commit_sha                    = "0123456789abcdef0123456789abcdef01234567"
-  cors_allowed_origins          = ["http://localhost:4014"]
-  deployment_url                = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
-  mongodb_database              = "voice_checklist_dev"
-  mongodb_uri                   = "mongodb+srv://example.mongodb.net/"
-  permissions_boundary_arn      = "arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary"
-  powersync_endpoint            = "https://development.powersync.example"
-  powersync_jwt_issuer          = "https://api.example.test"
-  powersync_jwt_key_id          = "development-1"
-  runtime_secret_parameter_name = "/voice-checklist/development/runtime"
+  artifact_digest          = "ASNFZ4mrze8BI0VniavN7wJEn06J1JtAAAS01jL84Vg="
+  artifact_sha256          = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  artifact_path            = "tests/fixtures/placeholder.zip"
+  aws_region               = "us-east-1"
+  cognito_client_ids       = ["android-client", "web-client"]
+  cognito_user_pool_id     = "us-east-1_06KAQuIlH"
+  commit_sha               = "0123456789abcdef0123456789abcdef01234567"
+  cors_allowed_origins     = ["http://localhost:4014"]
+  deployment_url           = "https://github.com/mbuchoff/voice-driven-checklist-backend/deployments/development"
+  mongodb_database         = "voice_checklist_dev"
+  mongodb_uri              = "mongodb+srv://example.mongodb.net/"
+  permissions_boundary_arn = "arn:aws:iam::198771014193:policy/voice-checklist-development-runtime-boundary"
+  powersync_endpoint       = "https://development.powersync.example"
+  powersync_jwt_issuer     = "https://api.example.test"
+  powersync_jwt_key_id     = "development-1"
+  runtime_secret_version   = 42
 }
 
 run "development_runtime_contract" {
@@ -59,6 +59,7 @@ run "development_runtime_contract" {
       toset(one(aws_lambda_function.placeholder).architectures) == toset(["arm64"]) &&
       one(aws_lambda_function.placeholder).environment[0].variables.COGNITO_USER_POOL_ID == "us-east-1_06KAQuIlH" &&
       one(aws_lambda_function.placeholder).environment[0].variables.RUNTIME_SECRET_PARAMETER_NAME == "/voice-checklist/development/runtime" &&
+      one(aws_lambda_function.placeholder).environment[0].variables.RUNTIME_SECRET_VERSION == "42" &&
       strcontains(one(aws_lambda_function.placeholder).description, var.commit_sha) &&
       strcontains(one(aws_lambda_function.placeholder).description, var.deployment_url)
     )
@@ -124,6 +125,50 @@ run "production_has_no_placeholder_runtime" {
     )
     error_message = "Issue #28 must not establish a production Lambda baseline."
   }
+}
+
+run "rejects_query_in_cors_origin" {
+  command = plan
+
+  variables {
+    environment          = "development"
+    cors_allowed_origins = ["https://example.test?mistyped=true"]
+  }
+
+  expect_failures = [var.cors_allowed_origins]
+}
+
+run "rejects_credentials_in_cors_origin" {
+  command = plan
+
+  variables {
+    environment          = "development"
+    cors_allowed_origins = ["https://user@example.test"]
+  }
+
+  expect_failures = [var.cors_allowed_origins]
+}
+
+run "rejects_wildcard_cors_origin" {
+  command = plan
+
+  variables {
+    environment          = "development"
+    cors_allowed_origins = ["https://*.example.test"]
+  }
+
+  expect_failures = [var.cors_allowed_origins]
+}
+
+run "rejects_out_of_range_cors_port" {
+  command = plan
+
+  variables {
+    environment          = "development"
+    cors_allowed_origins = ["https://example.test:65536"]
+  }
+
+  expect_failures = [var.cors_allowed_origins]
 }
 
 run "rejects_unknown_environment" {

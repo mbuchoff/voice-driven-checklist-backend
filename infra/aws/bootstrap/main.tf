@@ -133,10 +133,12 @@ resource "aws_iam_policy" "deployment_boundary" {
         Resource = "*"
       },
       {
-        Sid      = "DenyApplicationApiDeletion"
-        Effect   = "Deny"
-        Action   = "apigateway:DELETE"
-        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*"
+        Sid    = "DenyApplicationApiDeletion"
+        Effect = "Deny"
+        Action = "apigateway:DELETE"
+        # IAM wildcards cross path separators. Exclude every API child resource
+        # from this deny so route/integration/stage replacement remains possible.
+        NotResource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*/*"
         Condition = {
           StringLike = {
             "apigateway:Resource/ApiName" = "voice-checklist-*"
@@ -433,7 +435,7 @@ locals {
         Action = "apigateway:GET"
         Resource = [
           "arn:${local.partition}:apigateway:${var.aws_region}::/apis*",
-          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fapis%2F*",
         ]
       },
       {
@@ -458,7 +460,7 @@ locals {
         ]
         Resource = [
           "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*",
-          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fapis%2F*",
         ]
         Condition = {
           StringEquals = {
@@ -482,12 +484,6 @@ locals {
         Effect   = "Allow"
         Action   = local.api_log_delivery_actions
         Resource = "*"
-      },
-      {
-        Sid      = "ReadDevelopmentRuntimeSecret"
-        Effect   = "Allow"
-        Action   = "ssm:GetParameter"
-        Resource = "arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/voice-checklist/development/runtime"
       },
       {
         Sid      = "CreateDevelopmentRuntimeRoles"

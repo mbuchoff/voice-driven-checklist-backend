@@ -19,7 +19,8 @@ Selected-ref deployment may apply only the development state for this root. It
 may create a new backend service. Persistent addresses remain undeletable;
 reconstructable deletion or replacement needs explicit workflow authorization.
 
-The Development Lambda receives only public runtime settings and the name
-`/voice-checklist/development/runtime`. That SSM SecureString is seeded outside
-OpenTofu; the execution role can read only that exact parameter. See
+The Development Lambda receives only public runtime settings plus the name and
+reviewed numeric version of `/voice-checklist/development/runtime`. That SSM
+SecureString is seeded outside OpenTofu; the execution role can read only that
+exact parameter and the runtime requests only the pinned version. See
 [`docs/powersync-authentication.md`](../../../docs/powersync-authentication.md).

@@ -4,6 +4,7 @@ import { text } from 'node:stream/consumers';
 
 import { findInfrastructurePolicyViolations } from '../src/deployment/infrastructure-policy.js';
 import {
+  findRuntimeSecretVersionPinViolations,
   parseOpenTofuPlan,
   parsePolicyManifest,
 } from '../src/deployment/plan-policy.js';
@@ -40,13 +41,19 @@ async function main(): Promise<void> {
   }
 
   const manifest = parsePolicyManifest(await readJson(manifestPath));
-  const plan = parseOpenTofuPlan(await readJson(planPath));
-  const violations = await findInfrastructurePolicyViolations(
-    plan,
-    manifest,
-    resolve(configurationDirectory),
-    destructiveOverride === '--allow-reconstructable-destroy',
-  );
+  const rawPlan = await readJson(planPath);
+  const plan = parseOpenTofuPlan(rawPlan);
+  const violations = [
+    ...(manifest.stack === 'backend' && manifest.environment === 'development'
+      ? findRuntimeSecretVersionPinViolations(rawPlan)
+      : []),
+    ...(await findInfrastructurePolicyViolations(
+      plan,
+      manifest,
+      resolve(configurationDirectory),
+      destructiveOverride === '--allow-reconstructable-destroy',
+    )),
+  ];
 
   if (violations.length > 0) {
     throw new Error(`Infrastructure policy rejected the plan:\n${violations.join('\n')}`);

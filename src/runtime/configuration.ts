@@ -12,6 +12,11 @@ const mongoUrl = z.url().refine((value) => {
   );
 }, 'MONGODB_URI must use MongoDB and must not contain credentials');
 
+const runtimeSecretLocatorSchema = z.object({
+  RUNTIME_SECRET_PARAMETER_NAME: nonEmpty.regex(/^\/voice-checklist\/(development|production)\/runtime$/),
+  RUNTIME_SECRET_VERSION: z.coerce.number().int().positive(),
+});
+
 const environmentSchema = z.object({
   COGNITO_CLIENT_IDS: nonEmpty,
   COGNITO_USER_POOL_ID: nonEmpty.regex(/^[a-z]{2}-[a-z]+-\d+_[A-Za-z0-9]+$/),
@@ -20,7 +25,6 @@ const environmentSchema = z.object({
   POWERSYNC_ENDPOINT: httpsUrl,
   POWERSYNC_JWT_ISSUER: httpsUrl,
   POWERSYNC_JWT_KID: nonEmpty,
-  RUNTIME_SECRET_PARAMETER_NAME: nonEmpty.regex(/^\/voice-checklist\/(development|production)\/runtime$/),
 });
 
 const runtimeSecretSchema = z.strictObject({
@@ -93,10 +97,12 @@ export function parseRuntimeConfiguration(
   };
 }
 
-export function parseRuntimeSecretParameterName(
+export function parseRuntimeSecretLocator(
   environment: NodeJS.ProcessEnv,
-): string {
-  return environmentSchema.shape.RUNTIME_SECRET_PARAMETER_NAME.parse(
-    environment.RUNTIME_SECRET_PARAMETER_NAME,
-  );
+): { readonly parameterName: string; readonly version: number } {
+  const locator = runtimeSecretLocatorSchema.parse(environment);
+  return {
+    parameterName: locator.RUNTIME_SECRET_PARAMETER_NAME,
+    version: locator.RUNTIME_SECRET_VERSION,
+  };
 }

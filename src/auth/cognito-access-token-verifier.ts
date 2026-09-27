@@ -35,6 +35,7 @@ interface CognitoAccessTokenConfiguration {
 }
 
 const keyProviderErrorCodes = new Set([
+  'ERR_JOSE_GENERIC',
   'ERR_JWK_INVALID',
   'ERR_JWKS_INVALID',
   'ERR_JWKS_MULTIPLE_MATCHING_KEYS',

@@ -1,4 +1,4 @@
-import { generateKeyPair, SignJWT } from 'jose';
+import { errors, generateKeyPair, SignJWT } from 'jose';
 import { beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -69,6 +69,16 @@ describe('Cognito access-token verification', () => {
     const verifier = createCognitoAccessTokenVerifier(
       { clientIds: ['android-client'], issuer },
       () => Promise.reject(new Error('network unavailable')),
+    );
+
+    await expect(verifier.verify(await accessToken()))
+      .rejects.toBeInstanceOf(IdentityProviderUnavailableError);
+  });
+
+  it('treats a generic remote-key response failure as provider unavailability', async () => {
+    const verifier = createCognitoAccessTokenVerifier(
+      { clientIds: ['android-client'], issuer },
+      () => Promise.reject(new errors.JOSEError('remote JWKS response failed')),
     );
 
     await expect(verifier.verify(await accessToken()))

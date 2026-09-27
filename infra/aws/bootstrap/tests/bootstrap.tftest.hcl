@@ -212,10 +212,18 @@ run "environment_isolation_contract" {
       statement.Sid == "DenyApplicationApiDeletion" &&
       statement.Effect == "Deny" &&
       statement.Action == "apigateway:DELETE" &&
-      statement.Resource == "arn:aws:apigateway:us-east-1::/apis/*" &&
+      try(statement.NotResource, "") == "arn:aws:apigateway:us-east-1::/apis/*/*" &&
       try(statement.Condition.StringLike["apigateway:Resource/ApiName"], "") == "voice-checklist-*"
     ])
     error_message = "The deployment boundary must deny deletion of retained Voice Checklist APIs while allowing child-route replacement."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !strcontains(jsonencode(try(statement.Resource, "")), "%2Fv2%2Fapis")
+    ])
+    error_message = "API tag resources must encode the actual /apis ARN, not the HTTP API's /v2 request prefix."
   }
 
   assert {
@@ -269,6 +277,14 @@ run "environment_isolation_contract" {
       !strcontains(jsonencode(statement.Resource), "voice-checklist-production-")
     ])
     error_message = "The development deployment role must not address production application resources."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !strcontains(jsonencode(statement.Action), "ssm:")
+    ])
+    error_message = "Only the runtime role may read the encrypted application secret."
   }
 
   assert {

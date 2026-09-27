@@ -22,6 +22,12 @@ describe('contract generation', () => {
     expect(openapi.paths['/health']).toHaveProperty('get');
     expect(openapi.paths['/.well-known/jwks.json']).toHaveProperty('get');
     expect(openapi.paths['/v1/powersync/credentials']).toHaveProperty('post');
+    const jwksContract = JSON.stringify(
+      openapi.paths['/.well-known/jwks.json'],
+    );
+    expect(jwksContract).toContain('"200"');
+    expect(jwksContract).toContain('"503"');
+    expect(jwksContract).toContain('"temporarily_unavailable"');
     const credentialContract = JSON.stringify(
       openapi.paths['/v1/powersync/credentials'],
     );

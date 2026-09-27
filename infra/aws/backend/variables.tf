@@ -151,14 +151,14 @@ variable "powersync_jwt_key_id" {
   }
 }
 
-variable "runtime_secret_parameter_name" {
-  description = "Pre-seeded SSM SecureString containing MongoDB credentials and the PowerSync private JWK."
-  type        = string
-  default     = ""
+variable "runtime_secret_version" {
+  description = "Numeric SSM SecureString version pinned into the published Lambda version."
+  type        = number
+  default     = 0
 
   validation {
-    condition     = var.environment != "development" || var.runtime_secret_parameter_name == "/voice-checklist/development/runtime"
-    error_message = "Development runtime secrets must use the environment-scoped application parameter."
+    condition     = var.environment != "development" || (var.runtime_secret_version >= 1 && floor(var.runtime_secret_version) == var.runtime_secret_version)
+    error_message = "Development requires a positive numeric runtime-secret version."
   }
 }
 
@@ -166,6 +166,17 @@ variable "cors_allowed_origins" {
   description = "Exact browser origins allowed to call the development API."
   type        = list(string)
   default     = []
+
+  validation {
+    condition = var.environment != "development" || (
+      length(var.cors_allowed_origins) > 0 &&
+      alltrue([for origin in var.cors_allowed_origins : can(regex(
+        "^https?://(([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?)(\\.([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?))*|\\[[0-9A-Fa-f:.]+\\])(:([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5]))?$",
+        origin,
+      ))])
+    )
+    error_message = "Development requires at least one exact HTTP or HTTPS CORS origin."
+  }
 }
 
 variable "tags" {

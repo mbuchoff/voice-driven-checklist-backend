@@ -66,6 +66,55 @@ export function parseOpenTofuPlan(value: unknown): OpenTofuPlan {
   return result.data;
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
+}
+
+export function findRuntimeSecretVersionPinViolations(value: unknown): string[] {
+  const plan = record(value);
+  const plannedValues = record(plan?.planned_values);
+  const outputs = record(plannedValues?.outputs);
+  const versionOutput = record(outputs?.runtime_secret_version);
+  const version = versionOutput?.value;
+
+  if (
+    typeof version !== 'number' ||
+    !Number.isInteger(version) ||
+    version < 1
+  ) {
+    return ['runtime_secret_version: planned output must be a positive integer'];
+  }
+
+  const rootModule = record(plannedValues?.root_module);
+  const resources = rootModule?.resources;
+  const pinnedVersions = Array.isArray(resources)
+    ? resources.flatMap((resource) => {
+        const candidate = record(resource);
+        if (candidate?.address !== 'aws_lambda_function.placeholder[0]') {
+          return [];
+        }
+
+        const values = record(candidate.values);
+        const environment = values?.environment;
+        if (!Array.isArray(environment) || environment.length !== 1) {
+          return [];
+        }
+
+        const variables = record(record(environment[0])?.variables);
+        const pinnedVersion = variables?.RUNTIME_SECRET_VERSION;
+        return typeof pinnedVersion === 'string' ? [pinnedVersion] : [];
+      })
+    : [];
+
+  return pinnedVersions.length === 1 && pinnedVersions[0] === String(version)
+    ? []
+    : [
+        'aws_lambda_function.placeholder[0]: RUNTIME_SECRET_VERSION must match the planned runtime_secret_version output',
+      ];
+}
+
 export function findProtectedChangeViolations(
   plan: OpenTofuPlan,
   protectedAddresses: readonly string[],

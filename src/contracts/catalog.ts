@@ -42,6 +42,10 @@ export const apiContracts: readonly ApiContract[] = [
     path: '/.well-known/jwks.json',
     responses: {
       '200': { description: 'PowerSync credential verification keys.', schema: publicJwks },
+      '503': {
+        description: 'Runtime configuration is temporarily unavailable.',
+        schema: credentialError('temporarily_unavailable'),
+      },
     },
   },
   {
@@ -119,9 +123,7 @@ export function buildOpenApiDocument(
           ? {}
           : {
               requestBody: {
-                content: {
-                  ...jsonContent(contract.request),
-                },
+                content: jsonContent(contract.request),
                 required: true,
               },
             }),
@@ -134,21 +136,21 @@ export function buildOpenApiDocument(
   }
 
   return {
-      components: {
-        schemas: {},
-        securitySchemes: {
-          cognitoAccessToken: {
-            bearerFormat: 'Cognito access token',
-            scheme: 'bearer',
-            type: 'http',
-          },
+    components: {
+      schemas: {},
+      securitySchemes: {
+        cognitoAccessToken: {
+          bearerFormat: 'Cognito access token',
+          scheme: 'bearer',
+          type: 'http',
         },
       },
-      info: {
-        title: 'Voice-Driven Checklist Backend',
-        version: '0.1.0',
-      },
-      openapi: '3.1.0',
-      paths,
+    },
+    info: {
+      title: 'Voice-Driven Checklist Backend',
+      version: '0.1.0',
+    },
+    openapi: '3.1.0',
+    paths,
   };
 }

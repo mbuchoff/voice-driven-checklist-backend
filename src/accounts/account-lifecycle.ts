@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 const accountLifecycleState = z.enum(['active', 'deleting', 'deleted']);
 
+export const accountDeletionLedgerCollectionName = 'account_deletion_ledger';
+export const accountLifecycleCollectionName = 'account_lifecycle';
+
 export type AccountLifecycleState = z.infer<typeof accountLifecycleState>;
 
 export interface AccountLifecycleReader {

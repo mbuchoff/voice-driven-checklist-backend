@@ -59,7 +59,8 @@ Development reads `/voice-checklist/development/runtime` as one SSM
 The Lambda environment contains only public identifiers, a credential-free
 MongoDB URI, and the SSM parameter name. The runtime role can read only that
 exact parameter. The deployment workflow verifies that the parameter exists
-without printing its value.
+by exercising the new Lambda version's public JWKS route; the deployment role
+cannot read the parameter itself.
 
 ### Signing-key rotation
 
@@ -71,15 +72,23 @@ rejected. The active public key is always derived from `privateJwk` and
 Rotate without invalidating five-minute credentials:
 
 1. Add the next key's public JWK to `additionalPublicJwks`, deploy a new Lambda
-   version, and verify both key IDs appear in public JWKS.
+   version pinned to that SSM parameter version, and verify both key IDs appear
+   in public JWKS.
 2. Replace `privateJwk` with the next private JWK, change
-   `POWERSYNC_JWT_KID`, retain the old public JWK in
-   `additionalPublicJwks`, and deploy again.
+   `POWERSYNC_JWT_KID`, and replace `additionalPublicJwks` with the outgoing
+   key's public JWK (remove the newly promoted key from that array). Deploy again
+   with the new SSM parameter version.
 3. After the old credential lifetime plus the five-minute JWKS cache has elapsed,
-   remove the old public JWK and deploy once more.
+   remove the old public JWK and deploy once more with the final parameter version.
 
-Each phase uses a new immutable Lambda version, so the active alias does not mix
-old and new secret snapshots. Never reuse a `kid` for different key material.
+Each rotation change records the numeric `runtime_secret_version` beside
+`POWERSYNC_JWT_KID` in the reviewed Development tfvars. The deployment role has
+no permission to read the secret; the Lambda runtime requests only that exact
+version. Cold starts therefore cannot mix an old key ID with the latest secret.
+For a verified rollback, dispatch the original version-pinned commit, which
+carries its original version; the deployment workflow rejects pre-pinning
+commits before apply. Retain those SSM revisions for the rollback window. Never
+reuse a `kid` for different key material.
 
 ## Atlas Free networking
 
