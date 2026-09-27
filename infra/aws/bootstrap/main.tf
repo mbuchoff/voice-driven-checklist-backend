@@ -333,6 +333,16 @@ locals {
     "logs:UntagResource",
   ]
 
+  api_log_delivery_actions = [
+    "logs:CreateLogDelivery",
+    "logs:DeleteLogDelivery",
+    "logs:DescribeResourcePolicies",
+    "logs:GetLogDelivery",
+    "logs:ListLogDeliveries",
+    "logs:PutResourcePolicy",
+    "logs:UpdateLogDelivery",
+  ]
+
   deployment_secret_read_actions = [
     "secretsmanager:DescribeSecret",
     "secretsmanager:GetResourcePolicy",
@@ -412,6 +422,12 @@ locals {
           "arn:${local.partition}:apigateway:${var.aws_region}::/apis*",
           "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
         ]
+      },
+      {
+        Sid      = "ConfigureDevelopmentApiLogDelivery"
+        Effect   = "Allow"
+        Action   = local.api_log_delivery_actions
+        Resource = "*"
       },
       {
         Sid      = "ReadDevelopmentRuntimeSecret"

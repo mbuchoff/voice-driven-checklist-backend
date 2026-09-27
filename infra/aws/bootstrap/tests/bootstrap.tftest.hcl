@@ -179,12 +179,32 @@ run "environment_isolation_contract" {
   }
 
   assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      statement.Sid == "ConfigureDevelopmentApiLogDelivery" &&
+      statement.Resource == "*" &&
+      toset(try(tolist(statement.Action), [statement.Action])) == toset([
+        "logs:CreateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:DescribeResourcePolicies",
+        "logs:GetLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutResourcePolicy",
+        "logs:UpdateLogDelivery",
+      ])
+    ])
+    error_message = "Development HTTP API deployment must include the account-level CloudWatch Logs delivery permissions required by AWS."
+  }
+
+  assert {
     condition = alltrue([
       for statement in jsondecode(aws_iam_role_policy.production_deploy.policy).Statement :
       !strcontains(jsonencode(statement.Action), "apigateway:") &&
-      !strcontains(jsonencode(statement.Action), "ssm:")
+      !strcontains(jsonencode(statement.Action), "ssm:") &&
+      !strcontains(jsonencode(statement.Action), "logs:CreateLogDelivery") &&
+      !strcontains(jsonencode(statement.Action), "logs:PutResourcePolicy")
     ])
-    error_message = "GH-29 must not expand the production deployment role before production runtime delivery."
+    error_message = "GH-29 must not expand the production deployment role for the Development HTTP API or its log delivery."
   }
 
   assert {
