@@ -1,0 +1,23 @@
+{
+  "name": "checklist-powersync-local-proof",
+  "private": true,
+  "type": "module",
+  "engines": { "node": "24.x" },
+  "scripts": {
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "test:source": "vitest run tests/source-capabilities.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "jose": "6.2.12",
+    "mongodb": "7.6.0",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.12",
+    "tsx": "4.23.12",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11"
+  }
+}

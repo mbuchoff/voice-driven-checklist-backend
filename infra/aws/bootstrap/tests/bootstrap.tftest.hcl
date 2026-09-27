@@ -166,6 +166,41 @@ run "environment_isolation_contract" {
   }
 
   assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      statement.Sid == "ManageDevelopmentHttpApi" &&
+      statement.Action == "apigateway:*" &&
+      statement.Resource == "arn:aws:apigateway:us-east-1::/apis*"
+    ])
+    error_message = "Development HTTP API management must stay within the regional API resource path."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.production_deploy.policy).Statement :
+      !strcontains(jsonencode(statement.Action), "apigateway:") &&
+      !strcontains(jsonencode(statement.Action), "ssm:")
+    ])
+    error_message = "GH-29 must not expand the production deployment role before production runtime delivery."
+  }
+
+  assert {
+    condition = (
+      anytrue([
+        for statement in jsondecode(aws_iam_policy.runtime_boundary["development"].policy).Statement :
+        statement.Sid == "ReadEnvironmentRuntimeSecret" &&
+        statement.Action == "ssm:GetParameter" &&
+        statement.Resource == "arn:aws:ssm:us-east-1:198771014193:parameter/voice-checklist/development/runtime"
+      ]) &&
+      alltrue([
+        for statement in jsondecode(aws_iam_policy.runtime_boundary["production"].policy).Statement :
+        !strcontains(jsonencode(statement.Action), "ssm:")
+      ])
+    )
+    error_message = "Only the development runtime may read its exact pre-seeded runtime secret."
+  }
+
+  assert {
     condition = alltrue([
       for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
       !strcontains(jsonencode(statement.Resource), "voice-checklist-production-")

@@ -19,6 +19,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-ssm": "3.1141.0",
+    "jose": "6.2.12",
+    "mongodb": "7.6.0",
     "zod": "4.4.3"
   },
   "devDependencies": {

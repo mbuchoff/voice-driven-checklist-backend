@@ -1,0 +1,18 @@
+_type: cloud
+name: Development
+region: us
+
+replication:
+  connections:
+    - type: mongodb
+      uri: mongodb+srv://voicechecklist.0hbva2h.mongodb.net/voice_checklist_dev?authSource=admin
+      username: voice_checklist_sync_dev
+      password:
+        secret: !env GH29_ATLAS_SYNC_PASSWORD
+      database: voice_checklist_dev
+      post_images: read_only
+
+# Temporary proof tokens only. Production authentication remains Cognito
+# access-token-only and requires its separate accepted integration gate.
+client_auth:
+  allow_temporary_tokens: true

@@ -1,9 +1,9 @@
 # Backend infrastructure
 
-This root owns environment-scoped backend compute, execution roles, and logs.
-Development currently publishes a harmless direct-invocation Lambda. Production
-uses an independent state key but creates no Lambda until the first `/v1`
-baseline.
+This root owns environment-scoped backend HTTP API, compute, execution roles,
+and logs. Development publishes the active Lambda alias behind three explicit
+HTTP API routes: health, public JWKS, and the authenticated PowerSync credential
+exchange. Production uses an independent state key and still creates no runtime.
 
 Artifact and provenance values are deployment inputs rather than committed
 variables:
@@ -18,3 +18,8 @@ variables:
 Selected-ref deployment may apply only the development state for this root. It
 may create a new backend service. Persistent addresses remain undeletable;
 reconstructable deletion or replacement needs explicit workflow authorization.
+
+The Development Lambda receives only public runtime settings and the name
+`/voice-checklist/development/runtime`. That SSM SecureString is seeded outside
+OpenTofu; the execution role can read only that exact parameter. See
+[`docs/powersync-authentication.md`](../../../docs/powersync-authentication.md).

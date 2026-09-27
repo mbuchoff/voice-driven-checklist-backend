@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { buildContractDocuments } from '../src/contracts/catalog.js';
 
 describe('contract generation', () => {
-  it('emits valid empty API and event documents before the first backend contract', () => {
-    const documents = buildContractDocuments();
+  it('emits valid empty API and event documents for an empty catalog', () => {
+    const documents = buildContractDocuments({ apiContracts: [], eventContracts: {} });
 
     expect(documents.openapi.openapi).toBe('3.1.0');
     expect(documents.openapi.paths).toEqual({});
@@ -13,10 +13,19 @@ describe('contract generation', () => {
     expect(documents.events.events).toEqual({});
   });
 
-  it('does not invent a /v1 baseline before the API ticket defines one', () => {
+  it('publishes the authenticated PowerSync credential exchange and its stable failures', () => {
     const { openapi } = buildContractDocuments();
 
-    expect(Object.keys(openapi.paths).some((path) => path.startsWith('/v1'))).toBe(false);
+    expect(openapi.paths['/.well-known/jwks.json']).toHaveProperty('get');
+    expect(openapi.paths['/v1/powersync/credentials']).toHaveProperty('post');
+    const credentialContract = JSON.stringify(
+      openapi.paths['/v1/powersync/credentials'],
+    );
+    expect(credentialContract).toContain('"200"');
+    expect(credentialContract).toContain('"401"');
+    expect(credentialContract).toContain('"403"');
+    expect(credentialContract).toContain('"503"');
+    expect(credentialContract).toContain('"cognitoAccessToken":[]');
   });
 
   it('generates API and event documents from code-first contracts', () => {

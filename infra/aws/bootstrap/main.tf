@@ -91,6 +91,7 @@ locals {
   ]
 
   plan_permissions = [
+    "apigateway:GET",
     "cognito-idp:Describe*",
     "cognito-idp:Get*",
     "cognito-idp:List*",
@@ -169,7 +170,7 @@ resource "aws_iam_policy" "runtime_boundary" {
   description = "Maximum permissions for Voice Checklist ${each.key} runtime roles"
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
+    Statement = concat([
       {
         Sid    = "WriteEnvironmentLambdaLogs"
         Effect = "Allow"
@@ -179,7 +180,14 @@ resource "aws_iam_policy" "runtime_boundary" {
         ]
         Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-${each.key}-*:log-stream:*"
       },
-    ]
+      ], each.key == "development" ? [
+      {
+        Sid      = "ReadEnvironmentRuntimeSecret"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/voice-checklist/development/runtime"
+      },
+    ] : [])
   })
 }
 
@@ -388,10 +396,25 @@ locals {
         Resource = "arn:${local.partition}:lambda:${var.aws_region}:${local.account_id}:function:voice-checklist-development-*"
       },
       {
-        Sid      = "ManageDevelopmentLogGroups"
+        Sid    = "ManageDevelopmentLogGroups"
+        Effect = "Allow"
+        Action = local.log_group_management_actions
+        Resource = [
+          "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/apigateway/voice-checklist-development-*",
+          "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*",
+        ]
+      },
+      {
+        Sid      = "ManageDevelopmentHttpApi"
         Effect   = "Allow"
-        Action   = local.log_group_management_actions
-        Resource = "arn:${local.partition}:logs:${var.aws_region}:${local.account_id}:log-group:/aws/lambda/voice-checklist-development-*"
+        Action   = "apigateway:*"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis*"
+      },
+      {
+        Sid      = "ReadDevelopmentRuntimeSecret"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:${local.partition}:ssm:${var.aws_region}:${local.account_id}:parameter/voice-checklist/development/runtime"
       },
       {
         Sid      = "CreateDevelopmentRuntimeRoles"

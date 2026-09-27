@@ -114,6 +114,11 @@ jobs:
           aws-region: us-east-1
           role-to-assume: arn:aws:iam::198771014193:role/voice-checklist-github-development-deploy
           role-session-name: development-deployment
+      - name: Verify the externally seeded runtime secret
+        run: |
+          aws ssm get-parameter \
+            --name /voice-checklist/development/runtime \
+            --with-decryption >/dev/null
       - name: Save development deployment plan
         working-directory: candidate
         shell: bash
@@ -183,6 +188,11 @@ jobs:
             /tmp/lambda-response.json >/dev/null
           jq -e '.statusCode == 200 and (.body | fromjson | .status == "ok")' \
             /tmp/lambda-response.json >/dev/null
+          api_endpoint=$(tofu -chdir=infra/aws/backend output -raw api_endpoint)
+          curl --fail --silent --show-error "$api_endpoint/health" \
+            | jq -e '.status == "ok"' >/dev/null
+          curl --fail --silent --show-error "$api_endpoint/.well-known/jwks.json" \
+            | jq -e '.keys | length == 1 and .[0].kty == "RSA" and .[0].alg == "RS256" and (.[0] | has("d") | not)' >/dev/null
       - name: Mark deployment successful
         env:
           GH_TOKEN: ${{ github.token }}

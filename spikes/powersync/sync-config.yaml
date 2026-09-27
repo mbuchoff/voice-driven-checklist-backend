@@ -1,0 +1,9 @@
+config:
+  edition: 3
+streams:
+  owned_checklists:
+    auto_subscribe: true
+    query: |
+      SELECT _id AS id, owner_id, content
+      FROM checklists
+      WHERE owner_id = auth.user_id()
