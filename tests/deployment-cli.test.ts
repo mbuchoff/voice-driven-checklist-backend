@@ -64,6 +64,16 @@ describe('infrastructure policy command', () => {
   const destructivePlan = JSON.stringify({
     resource_changes: [
       {
+        address: 'aws_apigatewayv2_api.backend[0]',
+        change: { actions: ['no-op'] },
+        mode: 'managed',
+      },
+      {
+        address: 'aws_cloudwatch_log_group.api[0]',
+        change: { actions: ['no-op'] },
+        mode: 'managed',
+      },
+      {
         address: 'aws_cloudwatch_log_group.placeholder[0]',
         change: { actions: ['no-op'] },
         mode: 'managed',
