@@ -12,7 +12,8 @@ replication:
       database: voice_checklist_dev
       post_images: read_only
 
-# Temporary proof tokens only. Production authentication remains Cognito
-# access-token-only and requires its separate accepted integration gate.
 client_auth:
-  allow_temporary_tokens: true
+  jwks_uri: https://3rtgxivb53.execute-api.us-east-1.amazonaws.com/.well-known/jwks.json
+  # Issued credentials use the Development instance endpoint as their audience,
+  # which PowerSync accepts by default without additional_audiences.
+  allow_temporary_tokens: false

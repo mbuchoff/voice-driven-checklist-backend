@@ -6,6 +6,8 @@
     "aws_cloudwatch_log_group.placeholder"
   ],
   "planAddresses": [
+    "aws_apigatewayv2_api.backend[0]",
+    "aws_cloudwatch_log_group.api[0]",
     "aws_cloudwatch_log_group.placeholder[0]"
   ],
   "stack": "backend"
