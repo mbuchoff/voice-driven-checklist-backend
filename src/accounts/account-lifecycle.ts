@@ -29,6 +29,7 @@ interface AccountDeletionLedgerCollection {
 }
 
 const persistedLifecycle = z.strictObject({ state: accountLifecycleState });
+const lifecycleQueryTimeoutMilliseconds = 1_000;
 
 export function createMongoAccountLifecycleReader(
   collections: {
@@ -40,7 +41,7 @@ export function createMongoAccountLifecycleReader(
     async read(subject) {
       const document = await collections.lifecycle.findOne(
         { _id: subject },
-        { maxTimeMS: 2_000, projection: { _id: 0, state: 1 } },
+        { maxTimeMS: lifecycleQueryTimeoutMilliseconds, projection: { _id: 0, state: 1 } },
       );
 
       if (document !== null) {
@@ -52,7 +53,7 @@ export function createMongoAccountLifecycleReader(
       // token is expired; a genuinely new subject has neither record.
       const deletion = await collections.deletionLedger.findOne(
         { _id: subject },
-        { maxTimeMS: 2_000, projection: { _id: 1 } },
+        { maxTimeMS: lifecycleQueryTimeoutMilliseconds, projection: { _id: 1 } },
       );
       return deletion === null ? 'active' : 'deleted';
     },

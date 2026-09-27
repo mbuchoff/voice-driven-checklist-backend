@@ -20,7 +20,7 @@ beforeAll(async () => {
 
 async function accessToken(
   claims: Record<string, unknown> = {},
-  overrides: { expiresIn?: number; issuer?: string } = {},
+  overrides: { expiresIn?: number; issuedAt?: number; issuer?: string } = {},
 ): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
@@ -31,7 +31,7 @@ async function accessToken(
     .setProtectedHeader({ alg: 'RS256', kid: 'cognito-test' })
     .setIssuer(overrides.issuer ?? issuer)
     .setSubject(subject)
-    .setIssuedAt(now)
+    .setIssuedAt(overrides.issuedAt ?? now)
     .setExpirationTime(now + (overrides.expiresIn ?? 3600))
     .sign(privateKey);
 }
@@ -73,5 +73,18 @@ describe('Cognito access-token verification', () => {
 
     await expect(verifier.verify(await accessToken()))
       .rejects.toBeInstanceOf(IdentityProviderUnavailableError);
+  });
+
+  it('accepts a still-unexpired token without duplicating the pool lifetime policy', async () => {
+    const verifier = createCognitoAccessTokenVerifier(
+      { clientIds: ['android-client'], issuer },
+      publicKey,
+    );
+    const issuedAt = Math.floor(Date.now() / 1000) - (70 * 60);
+
+    await expect(verifier.verify(await accessToken({}, {
+      expiresIn: 10 * 60,
+      issuedAt,
+    }))).resolves.toEqual({ subject });
   });
 });

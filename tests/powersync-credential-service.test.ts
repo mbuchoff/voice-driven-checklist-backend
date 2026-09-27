@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import type { AccountLifecycleReader } from '../src/accounts/account-lifecycle.js';
 import {
   AccountUnavailableError,
-  createPowerSyncCredentialIssuer,
+  createPowerSyncCredentialAuthority,
   createPowerSyncCredentialService,
 } from '../src/auth/powersync-credential-service.js';
 
@@ -24,8 +24,7 @@ beforeAll(async () => {
 });
 
 function issuerUnderTest(now = () => new Date('2026-09-27T12:00:00.000Z')) {
-  return createPowerSyncCredentialIssuer({
-    audience: endpoint,
+  return createPowerSyncCredentialAuthority({
     endpoint,
     issuer,
     keyId: 'powersync-development-1',
@@ -36,9 +35,9 @@ function issuerUnderTest(now = () => new Date('2026-09-27T12:00:00.000Z')) {
 
 describe('PowerSync credential issuer', () => {
   it('issues only a five-minute, subject-scoped token and a public JWKS', async () => {
-    const credentialIssuer = issuerUnderTest();
+    const authority = issuerUnderTest();
 
-    const credentials = await credentialIssuer.issue(subject);
+    const credentials = await authority.credentials.issue(subject);
     const verified = await jwtVerify(credentials.token, publicKey, {
       algorithms: ['RS256'],
       audience: endpoint,
@@ -57,7 +56,7 @@ describe('PowerSync credential issuer', () => {
     });
     expect((verified.payload.exp ?? 0) - (verified.payload.iat ?? 0)).toBe(300);
     expect(verified.payload).not.toHaveProperty('email');
-    expect(credentialIssuer.jwks()).toEqual({
+    expect(authority.jwks).toEqual({
       keys: [expect.objectContaining({
         alg: 'RS256',
         kid: 'powersync-development-1',
@@ -65,7 +64,78 @@ describe('PowerSync credential issuer', () => {
         use: 'sig',
       })],
     });
-    expect(credentialIssuer.jwks().keys[0]).not.toHaveProperty('d');
+    expect(authority.jwks.keys[0]).not.toHaveProperty('d');
+  });
+
+  it('publishes retiring public keys during a signing-key rotation', async () => {
+    const retiring = await generateKeyPair('RS256', {
+      extractable: true,
+      modulusLength: 2048,
+    });
+    const retiringJwk = {
+      ...await exportJWK(retiring.publicKey),
+      alg: 'RS256',
+      kid: 'powersync-retiring',
+      use: 'sig',
+    };
+
+    const authority = createPowerSyncCredentialAuthority({
+      additionalPublicJwks: [retiringJwk],
+      endpoint,
+      issuer,
+      keyId: 'powersync-development-1',
+      privateJwk,
+    });
+
+    expect(authority.jwks.keys.map((key) => key.kid)).toEqual([
+      'powersync-development-1',
+      'powersync-retiring',
+    ]);
+    expect(authority.jwks.keys.every((key) => !('d' in key))).toBe(true);
+  });
+
+  it('rejects an incomplete private signing key before it can become a runtime promise', () => {
+    expect(() => createPowerSyncCredentialAuthority({
+      endpoint,
+      issuer,
+      keyId: 'powersync-development-1',
+      privateJwk: { d: 'd', e: 'AQAB', kty: 'RSA', n: 'n' },
+    })).toThrow();
+  });
+
+  it('rejects duplicate signing and verification key IDs', async () => {
+    const activePublic = {
+      ...await exportJWK(publicKey),
+      alg: 'RS256',
+      kid: 'powersync-development-1',
+      use: 'sig',
+    };
+
+    expect(() => createPowerSyncCredentialAuthority({
+      additionalPublicJwks: [activePublic],
+      endpoint,
+      issuer,
+      keyId: 'powersync-development-1',
+      privateJwk,
+    })).toThrow();
+  });
+
+  it('rejects a private member in an additional verification key', async () => {
+    const verification = {
+      ...await exportJWK(publicKey),
+      alg: 'RS256',
+      d: 'must-not-be-published',
+      kid: 'powersync-retiring',
+      use: 'sig',
+    };
+
+    expect(() => createPowerSyncCredentialAuthority({
+      additionalPublicJwks: [verification],
+      endpoint,
+      issuer,
+      keyId: 'powersync-development-1',
+      privateJwk,
+    })).toThrow();
   });
 });
 
@@ -75,8 +145,8 @@ describe('PowerSync credential service', () => {
     const lifecycle: AccountLifecycleReader = {
       read,
     };
-    const credentialIssuer = issuerUnderTest();
-    const service = createPowerSyncCredentialService(lifecycle, credentialIssuer);
+    const authority = issuerUnderTest();
+    const service = createPowerSyncCredentialService(lifecycle, authority.credentials);
 
     await expect(service.issue(subject)).resolves.toMatchObject({ endpoint });
     expect(read).toHaveBeenCalledWith(subject);
@@ -88,9 +158,9 @@ describe('PowerSync credential service', () => {
       const lifecycle: AccountLifecycleReader = {
         read: vi.fn().mockResolvedValue(state),
       };
-      const credentialIssuer = issuerUnderTest();
-      const issue = vi.spyOn(credentialIssuer, 'issue');
-      const service = createPowerSyncCredentialService(lifecycle, credentialIssuer);
+      const authority = issuerUnderTest();
+      const issue = vi.spyOn(authority.credentials, 'issue');
+      const service = createPowerSyncCredentialService(lifecycle, authority.credentials);
 
       await expect(service.issue(subject)).rejects.toBeInstanceOf(AccountUnavailableError);
       expect(issue).not.toHaveBeenCalled();

@@ -166,16 +166,56 @@ run "environment_isolation_contract" {
   }
 
   assert {
-    condition = anytrue([
-      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
-      statement.Sid == "ManageDevelopmentHttpApi" &&
-      statement.Action == "apigateway:*" &&
-      toset(try(tolist(statement.Resource), [statement.Resource])) == toset([
-        "arn:aws:apigateway:us-east-1::/apis*",
-        "arn:aws:apigateway:us-east-1::/tags/arn%3Aaws%3Aapigateway%3Aus-east-1%3A%3A%2Fv2%2Fapis%2F*",
+    condition = (
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "CreateDevelopmentHttpApi" &&
+        statement.Action == "apigateway:POST" &&
+        statement.Resource == "arn:aws:apigateway:us-east-1::/apis" &&
+        try(statement.Condition.StringEquals["apigateway:Request/ApiName"], "") == "voice-checklist-development-api" &&
+        try(statement.Condition.StringEquals["aws:RequestTag/Environment"], "") == "development"
+      ]) &&
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "ManageDevelopmentHttpApi" &&
+        toset(try(tolist(statement.Action), [statement.Action])) == toset([
+          "apigateway:PATCH",
+          "apigateway:POST",
+          "apigateway:PUT",
+        ]) &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Environment"], "") == "development"
+      ]) &&
+      anytrue([
+        for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+        statement.Sid == "DeleteDevelopmentHttpApiChildren" &&
+        statement.Action == "apigateway:DELETE" &&
+        statement.Resource == "arn:aws:apigateway:us-east-1::/apis/*/*" &&
+        try(statement.Condition.StringEquals["aws:ResourceTag/Environment"], "") == "development"
       ])
+    )
+    error_message = "Development HTTP API writes must require the exact API name/request tag or an existing Development resource tag, and API deletion itself must stay denied."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.development_deploy.policy).Statement :
+      !contains(try(tolist(statement.Action), [statement.Action]), "apigateway:*") &&
+      !(contains(try(tolist(statement.Action), [statement.Action]), "apigateway:DELETE") &&
+      contains(try(tolist(statement.Resource), [statement.Resource]), "arn:aws:apigateway:us-east-1::/apis/*"))
     ])
-    error_message = "Development HTTP API management must cover only the regional API and its encoded tag resource paths."
+    error_message = "Development deployment must not receive wildcard API Gateway actions or permission to delete an API."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_policy.deployment_boundary.policy).Statement :
+      statement.Sid == "DenyApplicationApiDeletion" &&
+      statement.Effect == "Deny" &&
+      statement.Action == "apigateway:DELETE" &&
+      statement.Resource == "arn:aws:apigateway:us-east-1::/apis/*" &&
+      try(statement.Condition.StringLike["apigateway:Resource/ApiName"], "") == "voice-checklist-*"
+    ])
+    error_message = "The deployment boundary must deny deletion of retained Voice Checklist APIs while allowing child-route replacement."
   }
 
   assert {
@@ -383,9 +423,9 @@ run "production_cognito_delete_deny_contract" {
     condition = anytrue([
       for statement in jsondecode(aws_iam_policy.deployment_boundary.policy).Statement :
       statement.Effect == "Deny" &&
-      contains(statement.Action, "iam:PutRolePolicy") &&
-      contains(statement.Action, "iam:AttachRolePolicy") &&
-      contains(statement.Action, "iam:PutRolePermissionsBoundary")
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:PutRolePolicy") &&
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:AttachRolePolicy") &&
+      contains(try(tolist(statement.Action), [statement.Action]), "iam:PutRolePermissionsBoundary")
     ])
     error_message = "The boundary must deny GitHub roles the ability to rewrite their policies or boundary."
   }

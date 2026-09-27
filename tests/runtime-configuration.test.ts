@@ -34,9 +34,24 @@ describe('runtime configuration', () => {
       clientIds: ['android-client', 'web-client'],
       issuer: 'https://cognito-idp.us-east-1.amazonaws.com/us-east-1_06KAQuIlH',
     });
-    expect(configuration.powersync.audience).toBe(
+    expect(configuration.powersync.endpoint).toBe(
       'https://development.powersync.example',
     );
+  });
+
+  it('preserves opaque database credentials byte-for-byte', () => {
+    const configuration = parseRuntimeConfiguration(environment(), {
+      ...runtimeSecret,
+      mongodb: {
+        password: ' leading-and-trailing-password ',
+        username: ' application-user ',
+      },
+    });
+
+    expect(configuration.mongodb).toMatchObject({
+      password: ' leading-and-trailing-password ',
+      username: ' application-user ',
+    });
   });
 
   it.each([

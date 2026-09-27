@@ -10,10 +10,13 @@ const host = 'voicechecklist.0hbva2h.mongodb.net';
 const database = 'voice_checklist_dev';
 const collectionName = 'gh29_cloud_checklists';
 const marker = 'gh29-cloud-proof-2026-09-19';
-const expectedOwners = ['gh29-alice', 'gh29-bob'];
+const expectedOwners = [process.env.GH29_ALICE_SUB, process.env.GH29_BOB_SUB];
+assert(expectedOwners.every(Boolean), 'Set GH29_ALICE_SUB and GH29_BOB_SUB');
+assert.notEqual(expectedOwners[0], expectedOwners[1], 'Proof subjects must be distinct');
 
 function clientFor(path, expectedUsername) {
-  const values = parseEnv(readFileSync(new URL(path, import.meta.url), 'utf8'));
+  assert(path, 'Set GH29_ATLAS_APP_ENV_FILE');
+  const values = parseEnv(readFileSync(path, 'utf8'));
   const supplied = new URL(values.MONGODB_URI);
   assert.equal(supplied.protocol, 'mongodb+srv:');
   assert.equal(supplied.hostname, host);
@@ -27,8 +30,9 @@ function clientFor(path, expectedUsername) {
   });
 }
 
-const app = clientFor('../../../../atlas-app-dev.env', 'voice_checklist_app_dev');
-const adminValues = parseEnv(readFileSync(new URL('../../../../atlas-credentials.env', import.meta.url), 'utf8'));
+const app = clientFor(process.env.GH29_ATLAS_APP_ENV_FILE, 'voice_checklist_app_dev');
+assert(process.env.GH29_ATLAS_ADMIN_ENV_FILE, 'Set GH29_ATLAS_ADMIN_ENV_FILE');
+const adminValues = parseEnv(readFileSync(process.env.GH29_ATLAS_ADMIN_ENV_FILE, 'utf8'));
 const adminUri = new URL(adminValues.MONGODB_URI);
 assert.equal(adminUri.protocol, 'mongodb+srv:');
 assert.equal(adminUri.hostname, host);

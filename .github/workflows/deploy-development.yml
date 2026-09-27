@@ -192,7 +192,7 @@ jobs:
           curl --fail --silent --show-error "$api_endpoint/health" \
             | jq -e '.status == "ok"' >/dev/null
           curl --fail --silent --show-error "$api_endpoint/.well-known/jwks.json" \
-            | jq -e '.keys | length == 1 and .[0].kty == "RSA" and .[0].alg == "RS256" and (.[0] | has("d") | not)' >/dev/null
+            | jq -e '.keys | length >= 1 and all(.[]; .kty == "RSA" and .alg == "RS256" and (.kid | length > 0) and (has("d") | not))' >/dev/null
       - name: Mark deployment successful
         env:
           GH_TOKEN: ${{ github.token }}

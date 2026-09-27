@@ -6,6 +6,7 @@
   "scripts": {
     "start": "tsx src/server.ts",
     "test": "vitest run",
+    "test:ci": "node --check cloud-proof/powersync-client.mjs && node --check cloud-proof/client-proof.mjs && node --check cloud-proof/propagation-proof.mjs && node --check cloud-proof/source-fixture.mjs && vitest run tests/source-target.test.ts",
     "test:source": "vitest run tests/source-capabilities.test.ts",
     "typecheck": "tsc --noEmit"
   },

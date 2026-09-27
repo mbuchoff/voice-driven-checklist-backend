@@ -11,7 +11,7 @@ let server: Server;
 let base: string;
 let alice: string;
 let bob: string;
-const content = JSON.stringify({ title: 'Packing', items: [{ id: randomUUID(), text: 'Passport', checked: false }] });
+const content = JSON.stringify({ title: 'Packing', items: [{ id: randomUUID(), text: 'Passport' }] });
 
 async function upload(token: string, id: string, data: unknown) {
   return fetch(`${base}/checklists/${id}`, {
@@ -78,8 +78,8 @@ describe('local checklist upload boundary', () => {
   it.each([
     { content: 'not json' },
     { content: JSON.stringify({ title: '', items: [] }) },
-    { content: JSON.stringify({ title: 'Packing', items: [{ id: 'not-a-uuid', text: 'Passport', checked: false }] }) },
-    { content: JSON.stringify({ title: 'Packing', items: Array.from({ length: 201 }, () => ({ id: randomUUID(), text: 'Item', checked: false })) }) },
+    { content: JSON.stringify({ title: 'Packing', items: [{ id: 'not-a-uuid', text: 'Passport' }] }) },
+    { content: JSON.stringify({ title: 'Packing', items: Array.from({ length: 201 }, () => ({ id: randomUUID(), text: 'Item' })) }) },
     null,
   ])('rejects invalid checklist data without writing it: %j', async data => {
     const id = randomUUID();

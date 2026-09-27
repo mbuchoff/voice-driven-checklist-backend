@@ -163,6 +163,38 @@ provides only the public verification key. Authenticated `PUT /checklists/{uuid}
 accepts `{ "content": "<JSON checklist>" }`, commits before acknowledging, and
 derives ownership exclusively from the verified token.
 
+### Authenticated PowerSync Cloud proof
+
+The checked-in `cloud-proof` scripts target the final Development configuration:
+PowerSync temporary tokens stay disabled, and each client exchanges a real
+Cognito access token through the backend. Use two disposable Cognito users and
+keep their tokens in process-local environment variables; never write or print
+them. Set these non-secret paths and derived Cognito subjects as well:
+
+```bash
+export GH29_POWERSYNC_NODE_SDK_ROOT=/tmp/gh29-powersync-node-sdk
+export GH29_ATLAS_APP_ENV_FILE=../../../atlas-app-dev.env
+export GH29_ATLAS_ADMIN_ENV_FILE=../../../atlas-credentials.env
+export GH29_ALICE_SUB='<validated access-token sub>'
+export GH29_BOB_SUB='<validated access-token sub>'
+```
+
+With `GH29_ALICE_ACCESS_TOKEN` and `GH29_BOB_ACCESS_TOKEN` set, run from this
+directory:
+
+```bash
+node cloud-proof/source-fixture.mjs prepare
+node cloud-proof/client-proof.mjs
+node cloud-proof/propagation-proof.mjs
+node cloud-proof/source-fixture.mjs cleanup
+```
+
+Preparation refuses to overwrite an existing proof collection. Cleanup verifies
+the exact marker, subjects, and document count before dropping that collection.
+The client proof checks first sync and account isolation; the propagation proof
+mutates one synthetic source document, observes delivery only to its owner, and
+restores the original content before exit.
+
 ## Rebuild derived sync state without deleting the source
 
 Stop only this proof's PowerSync container. Keep MongoDB and the API running,

@@ -254,6 +254,14 @@ describe('GitHub Actions policy', () => {
     expect(runs(continuousIntegration)).toContain('npm audit');
   });
 
+  it('typechecks and exercises the committed PowerSync proof in CI', async () => {
+    const commands = runs(await workflow('ci'));
+
+    expect(commands).toContain('npm --prefix spikes/powersync ci');
+    expect(commands).toContain('npm --prefix spikes/powersync run typecheck');
+    expect(commands).toContain('npm --prefix spikes/powersync run test:ci');
+  });
+
   it('retains the exact development artifact for the accepted 90-day window', async () => {
     const configuration = await workflow('deploy-development');
     const upload = Object.values(configuration.jobs)

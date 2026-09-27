@@ -36,4 +36,20 @@ describe('SSM runtime secret reader', () => {
 
     await expect(reader.read('/voice-checklist/development/runtime')).rejects.toThrow();
   });
+
+  it('aborts a parameter read before it can consume the API request budget', async () => {
+    const send = vi.fn((
+      _command: GetParameterCommand,
+      options?: { abortSignal?: AbortSignal },
+    ) => new Promise<GetParameterCommandOutput>((_resolve, reject) => {
+      options?.abortSignal?.addEventListener('abort', () => {
+        reject(new Error('aborted'));
+      });
+    }));
+    const reader = createSsmRuntimeSecretReader({ send }, { timeoutMs: 10 });
+
+    await expect(reader.read('/voice-checklist/development/runtime')).rejects.toThrow(
+      'aborted',
+    );
+  });
 });

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const nonEmpty = z.string().trim().min(1);
+const opaqueNonEmpty = z.string().min(1);
 const httpsUrl = z.url().refine((value) => new URL(value).protocol === 'https:');
 const mongoUrl = z.url().refine((value) => {
   const parsed = new URL(value);
@@ -24,10 +25,11 @@ const environmentSchema = z.object({
 
 const runtimeSecretSchema = z.strictObject({
   mongodb: z.strictObject({
-    password: nonEmpty,
-    username: nonEmpty,
+    password: opaqueNonEmpty,
+    username: opaqueNonEmpty,
   }),
   powersync: z.strictObject({
+    additionalPublicJwks: z.array(z.record(z.string(), z.unknown())).optional(),
     privateJwk: z.record(z.string(), z.unknown()),
   }),
 });
@@ -44,13 +46,12 @@ export interface RuntimeConfiguration {
     readonly username: string;
   };
   readonly powersync: {
-    readonly audience: string;
+    readonly additionalPublicJwks: readonly Record<string, unknown>[];
     readonly endpoint: string;
     readonly issuer: string;
     readonly keyId: string;
     readonly privateJwk: Record<string, unknown>;
   };
-  readonly runtimeSecretParameterName: string;
 }
 
 export function parseRuntimeConfiguration(
@@ -83,13 +84,12 @@ export function parseRuntimeConfiguration(
       username: secret.mongodb.username,
     },
     powersync: {
-      audience: values.POWERSYNC_ENDPOINT,
+      additionalPublicJwks: secret.powersync.additionalPublicJwks ?? [],
       endpoint: values.POWERSYNC_ENDPOINT,
       issuer: values.POWERSYNC_JWT_ISSUER,
       keyId: values.POWERSYNC_JWT_KID,
       privateJwk: secret.powersync.privateJwk,
     },
-    runtimeSecretParameterName: values.RUNTIME_SECRET_PARAMETER_NAME,
   };
 }
 

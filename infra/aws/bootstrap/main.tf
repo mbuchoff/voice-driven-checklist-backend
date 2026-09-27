@@ -133,6 +133,17 @@ resource "aws_iam_policy" "deployment_boundary" {
         Resource = "*"
       },
       {
+        Sid      = "DenyApplicationApiDeletion"
+        Effect   = "Deny"
+        Action   = "apigateway:DELETE"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*"
+        Condition = {
+          StringLike = {
+            "apigateway:Resource/ApiName" = "voice-checklist-*"
+          }
+        }
+      },
+      {
         Sid    = "DenyApplicationObjectDeletion"
         Effect = "Deny"
         Action = [
@@ -333,6 +344,8 @@ locals {
     "logs:UntagResource",
   ]
 
+  # AWS vended-log delivery control-plane actions do not support resource-level
+  # permissions. Keep this exceptional account-wide set Development-only.
   api_log_delivery_actions = [
     "logs:CreateLogDelivery",
     "logs:DeleteLogDelivery",
@@ -415,13 +428,54 @@ locals {
         ]
       },
       {
-        Sid    = "ManageDevelopmentHttpApi"
+        Sid    = "ReadRegionalHttpApis"
         Effect = "Allow"
-        Action = "apigateway:*"
+        Action = "apigateway:GET"
         Resource = [
           "arn:${local.partition}:apigateway:${var.aws_region}::/apis*",
           "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
         ]
+      },
+      {
+        Sid      = "CreateDevelopmentHttpApi"
+        Effect   = "Allow"
+        Action   = "apigateway:POST"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis"
+        Condition = {
+          StringEquals = {
+            "apigateway:Request/ApiName" = "voice-checklist-development-api"
+            "aws:RequestTag/Environment" = "development"
+          }
+        }
+      },
+      {
+        Sid    = "ManageDevelopmentHttpApi"
+        Effect = "Allow"
+        Action = [
+          "apigateway:PATCH",
+          "apigateway:POST",
+          "apigateway:PUT",
+        ]
+        Resource = [
+          "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*",
+          "arn:${local.partition}:apigateway:${var.aws_region}::/tags/arn%3Aaws%3Aapigateway%3A${var.aws_region}%3A%3A%2Fv2%2Fapis%2F*",
+        ]
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/Environment" = "development"
+          }
+        }
+      },
+      {
+        Sid      = "DeleteDevelopmentHttpApiChildren"
+        Effect   = "Allow"
+        Action   = "apigateway:DELETE"
+        Resource = "arn:${local.partition}:apigateway:${var.aws_region}::/apis/*/*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/Environment" = "development"
+          }
+        }
       },
       {
         Sid      = "ConfigureDevelopmentApiLogDelivery"

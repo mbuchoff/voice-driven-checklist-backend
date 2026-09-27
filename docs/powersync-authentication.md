@@ -4,8 +4,7 @@ The app continues to authenticate with Cognito authorization code + PKCE. When
 the PowerSync SDK requests credentials, it sends the Cognito **access token** to
 `POST /v1/powersync/credentials`. The backend:
 
-1. verifies the Cognito RS256 signature, exact user-pool issuer, expiry and
-   issued-at age;
+1. verifies the Cognito RS256 signature, exact user-pool issuer and expiry;
 2. requires `token_use=access` and one of the configured public app-client IDs;
 3. derives the cloud account only from the verified `sub`;
 4. checks `account_lifecycle`, then the retained `account_deletion_ledger` when
@@ -46,7 +45,12 @@ Development reads `/voice-checklist/development/runtime` as one SSM
       "kty": "RSA",
       "n": "<base64url modulus>",
       "e": "AQAB",
-      "d": "<private exponent and remaining private RSA fields>"
+      "d": "<private exponent>",
+      "p": "<first prime factor>",
+      "q": "<second prime factor>",
+      "dp": "<first CRT exponent>",
+      "dq": "<second CRT exponent>",
+      "qi": "<first CRT coefficient>"
     }
   }
 }
@@ -56,6 +60,26 @@ The Lambda environment contains only public identifiers, a credential-free
 MongoDB URI, and the SSM parameter name. The runtime role can read only that
 exact parameter. The deployment workflow verifies that the parameter exists
 without printing its value.
+
+### Signing-key rotation
+
+The optional `powersync.additionalPublicJwks` array contains retiring or staged
+public RS256 keys. Every entry must have a unique `kid`, and private members are
+rejected. The active public key is always derived from `privateJwk` and
+`POWERSYNC_JWT_KID`; if the private JWK already has a `kid`, it must match.
+
+Rotate without invalidating five-minute credentials:
+
+1. Add the next key's public JWK to `additionalPublicJwks`, deploy a new Lambda
+   version, and verify both key IDs appear in public JWKS.
+2. Replace `privateJwk` with the next private JWK, change
+   `POWERSYNC_JWT_KID`, retain the old public JWK in
+   `additionalPublicJwks`, and deploy again.
+3. After the old credential lifetime plus the five-minute JWKS cache has elapsed,
+   remove the old public JWK and deploy once more.
+
+Each phase uses a new immutable Lambda version, so the active alias does not mix
+old and new secret snapshots. Never reuse a `kid` for different key material.
 
 ## Atlas Free networking
 

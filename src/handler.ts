@@ -4,17 +4,17 @@ import type {
   Context,
 } from 'aws-lambda';
 import { MongoClient } from 'mongodb';
+import { ZodError } from 'zod';
 
 import { createMongoAccountLifecycleReader } from './accounts/account-lifecycle.js';
 import {
-  IdentityProviderUnavailableError,
   InvalidAccessTokenError,
   createCognitoAccessTokenVerifier,
   type AccessTokenVerifier,
 } from './auth/cognito-access-token-verifier.js';
 import {
   AccountUnavailableError,
-  createPowerSyncCredentialIssuer,
+  createPowerSyncCredentialAuthority,
   createPowerSyncCredentialService,
   type PowerSyncCredentialIssuer,
 } from './auth/powersync-credential-service.js';
@@ -27,10 +27,11 @@ import { createSsmRuntimeSecretReader } from './runtime/runtime-secret.js';
 interface HandlerDependencies {
   readonly accessTokens: AccessTokenVerifier;
   readonly credentials: PowerSyncCredentialIssuer;
+  readonly jwks: { readonly keys: readonly unknown[] };
 }
 
 type BackendHandler = (
-  event: unknown,
+  event: APIGatewayProxyEventV2,
   context: Context,
 ) => Promise<APIGatewayProxyStructuredResultV2>;
 
@@ -81,17 +82,9 @@ export function createHandler(dependencies: HandlerDependencies): BackendHandler
   return async (event, context) => {
     void context;
 
-    // Preserve direct-invocation health probes from the infrastructure baseline.
-    if (!isHttpEvent(event)) {
-      return json(200, { status: 'ok' });
-    }
-
     const method = event.requestContext.http.method.toUpperCase();
-    if (method === 'GET' && event.rawPath === '/health') {
-      return json(200, { status: 'ok' });
-    }
     if (method === 'GET' && event.rawPath === '/.well-known/jwks.json') {
-      return json(200, dependencies.credentials.jwks(), 'public, max-age=300');
+      return json(200, dependencies.jwks, 'public, max-age=300');
     }
     if (method !== 'POST' || event.rawPath !== '/v1/powersync/credentials') {
       return json(404, { code: 'not_found' });
@@ -112,9 +105,6 @@ export function createHandler(dependencies: HandlerDependencies): BackendHandler
       if (error instanceof AccountUnavailableError) {
         return json(403, { code: 'account_unavailable' });
       }
-      if (error instanceof IdentityProviderUnavailableError) {
-        return json(503, { code: 'temporarily_unavailable' });
-      }
       return json(503, { code: 'temporarily_unavailable' });
     }
   };
@@ -134,26 +124,43 @@ async function createRuntimeHandler(
     },
     maxIdleTimeMS: 60_000,
     maxPoolSize: 10,
-    serverSelectionTimeoutMS: 3_000,
+    connectTimeoutMS: 1_500,
+    serverSelectionTimeoutMS: 1_500,
   });
+  const database = mongo.db(configuration.mongodb.database);
   const lifecycle = createMongoAccountLifecycleReader(
     {
-      deletionLedger: mongo
-        .db(configuration.mongodb.database)
-        .collection('account_deletion_ledger'),
-      lifecycle: mongo
-        .db(configuration.mongodb.database)
-        .collection('account_lifecycle'),
+      deletionLedger: database.collection('account_deletion_ledger'),
+      lifecycle: database.collection('account_lifecycle'),
     },
   );
-  const credentialIssuer = createPowerSyncCredentialIssuer(
+  const authority = createPowerSyncCredentialAuthority(
     configuration.powersync,
   );
 
   return createHandler({
     accessTokens: createCognitoAccessTokenVerifier(configuration.cognito),
-    credentials: createPowerSyncCredentialService(lifecycle, credentialIssuer),
+    credentials: createPowerSyncCredentialService(lifecycle, authority.credentials),
+    jwks: authority.jwks,
   });
+}
+
+function initializationFailure(error: unknown): {
+  readonly errorName: string;
+  readonly event: 'runtime_initialization_failed';
+  readonly issuePaths?: readonly string[];
+} {
+  if (error instanceof Error) {
+    const issuePaths = error instanceof ZodError
+      ? error.issues.map((issue) => issue.path.map(String).join('.'))
+      : undefined;
+    return {
+      errorName: error.name,
+      event: 'runtime_initialization_failed',
+      ...(issuePaths === undefined ? {} : { issuePaths }),
+    };
+  }
+  return { errorName: 'UnknownError', event: 'runtime_initialization_failed' };
 }
 
 let runtimeHandler: Promise<BackendHandler> | undefined;
@@ -172,8 +179,9 @@ export async function handler(
   try {
     runtimeHandler ??= createRuntimeHandler(process.env);
     return await (await runtimeHandler)(event, context);
-  } catch {
+  } catch (error) {
     runtimeHandler = undefined;
+    console.error(initializationFailure(error));
     return json(503, { code: 'temporarily_unavailable' });
   }
 }

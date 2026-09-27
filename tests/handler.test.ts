@@ -46,8 +46,8 @@ function dependencies() {
         expiresAt: '2026-09-27T12:05:00.000Z',
         token: 'signed-token',
       }),
-      jwks: vi.fn().mockReturnValue({ keys: [{ kty: 'RSA' }] }),
     },
+    jwks: { keys: [{ kty: 'RSA' as const }] },
   };
 }
 
@@ -60,6 +60,7 @@ describe('backend HTTP handler', () => {
   });
 
   it('fails closed when runtime secret configuration is unavailable', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const response = await runtimeHandler(
       event('POST', '/v1/powersync/credentials', 'Bearer token'),
       {} as Context,
@@ -69,13 +70,22 @@ describe('backend HTTP handler', () => {
     expect(JSON.parse(response.body ?? '')).toEqual({
       code: 'temporarily_unavailable',
     });
+    const logged = log.mock.calls[0]?.[0] as unknown;
+    expect(logged).toMatchObject({
+      errorName: 'ZodError',
+      event: 'runtime_initialization_failed',
+    });
+    expect(JSON.stringify(log.mock.calls)).not.toContain('runtime secret');
+    log.mockRestore();
   });
 
-  it('retains the harmless health response without exposing runtime input', async () => {
-    const handler = createHandler(dependencies());
+  it('keeps HTTP health independent of secret runtime configuration', async () => {
     const sensitiveInput = 'must-not-be-returned';
 
-    const response = await handler(event('GET', '/health', sensitiveInput), {} as Context);
+    const response = await runtimeHandler(
+      event('GET', '/health', sensitiveInput),
+      {} as Context,
+    );
     const body = response.body ?? '';
 
     expect(response.statusCode).toBe(200);
@@ -90,7 +100,7 @@ describe('backend HTTP handler', () => {
     const response = await handler(event('GET', '/.well-known/jwks.json'), {} as Context);
 
     expect(response.statusCode).toBe(200);
-    expect(JSON.parse(response.body ?? '')).toEqual({ keys: [{ kty: 'RSA' }] });
+    expect(JSON.parse(response.body ?? '')).toEqual(deps.jwks);
     expect(deps.accessTokens.verify).not.toHaveBeenCalled();
   });
 

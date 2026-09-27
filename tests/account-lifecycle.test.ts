@@ -14,11 +14,11 @@ describe('MongoDB account lifecycle reader', () => {
     await expect(reader.read('new-subject')).resolves.toBe('active');
     expect(lifecycleFindOne).toHaveBeenCalledWith(
       { _id: 'new-subject' },
-      { maxTimeMS: 2_000, projection: { _id: 0, state: 1 } },
+      { maxTimeMS: 1_000, projection: { _id: 0, state: 1 } },
     );
     expect(ledgerFindOne).toHaveBeenCalledWith(
       { _id: 'new-subject' },
-      { maxTimeMS: 2_000, projection: { _id: 1 } },
+      { maxTimeMS: 1_000, projection: { _id: 1 } },
     );
   });
 

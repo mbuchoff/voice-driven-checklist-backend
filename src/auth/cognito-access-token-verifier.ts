@@ -34,24 +34,22 @@ interface CognitoAccessTokenConfiguration {
   readonly issuer: string;
 }
 
-const validationErrorCodes = new Set([
-  'ERR_JOSE_ALG_NOT_ALLOWED',
-  'ERR_JWS_INVALID',
-  'ERR_JWS_SIGNATURE_VERIFICATION_FAILED',
-  'ERR_JWKS_NO_MATCHING_KEY',
-  'ERR_JWT_CLAIM_VALIDATION_FAILED',
-  'ERR_JWT_EXPIRED',
-  'ERR_JWT_INVALID',
+const keyProviderErrorCodes = new Set([
+  'ERR_JWK_INVALID',
+  'ERR_JWKS_INVALID',
+  'ERR_JWKS_MULTIPLE_MATCHING_KEYS',
+  'ERR_JWKS_TIMEOUT',
 ]);
 
-function isCallerValidationError(error: unknown): boolean {
-  return error instanceof errors.JOSEError && validationErrorCodes.has(error.code);
+function isKeyProviderError(error: unknown): boolean {
+  return error instanceof errors.JOSEError && keyProviderErrorCodes.has(error.code);
 }
 
 export function createCognitoAccessTokenVerifier(
   configuration: CognitoAccessTokenConfiguration,
   key: KeyInput | JWTVerifyGetKey = createRemoteJWKSet(
     new URL(`${configuration.issuer}/.well-known/jwks.json`),
+    { timeoutDuration: 1_500 },
   ),
 ): AccessTokenVerifier {
   const allowedClients = new Set(configuration.clientIds);
@@ -68,16 +66,15 @@ export function createCognitoAccessTokenVerifier(
           algorithms: ['RS256'],
           clockTolerance: 30,
           issuer: configuration.issuer,
-          maxTokenAge: 65 * 60,
           requiredClaims: ['exp', 'sub', 'token_use', 'client_id'],
         });
         const payload = claims.parse(verified.payload);
         return { subject: payload.sub };
       } catch (error) {
-        if (error instanceof z.ZodError || isCallerValidationError(error)) {
-          throw new InvalidAccessTokenError();
+        if (isKeyProviderError(error) || !(error instanceof errors.JOSEError || error instanceof z.ZodError)) {
+          throw new IdentityProviderUnavailableError();
         }
-        throw new IdentityProviderUnavailableError();
+        throw new InvalidAccessTokenError();
       }
     },
   };

@@ -1,19 +1,14 @@
 import { z } from 'zod';
 
 export interface ApiContract {
-  readonly accessToken?: boolean;
   readonly method: 'delete' | 'get' | 'patch' | 'post' | 'put';
   readonly path: `/${string}`;
   readonly request?: z.ZodType;
-  readonly response?: z.ZodType;
-  readonly responses?: Readonly<Record<string, {
+  readonly responses: Readonly<Record<string, {
     readonly description: string;
     readonly schema?: z.ZodType;
   }>>;
-}
-
-export interface EventContract {
-  readonly schema: z.ZodType;
+  readonly security?: 'cognitoAccessToken';
 }
 
 const powerSyncCredentials = z.strictObject({
@@ -33,6 +28,8 @@ const publicJwks = z.strictObject({
   })).min(1),
 });
 
+const health = z.strictObject({ status: z.literal('ok') });
+
 function credentialError(
   code: 'account_unavailable' | 'invalid_access_token' | 'temporarily_unavailable',
 ) {
@@ -43,10 +40,18 @@ export const apiContracts: readonly ApiContract[] = [
   {
     method: 'get',
     path: '/.well-known/jwks.json',
-    response: publicJwks,
+    responses: {
+      '200': { description: 'PowerSync credential verification keys.', schema: publicJwks },
+    },
   },
   {
-    accessToken: true,
+    method: 'get',
+    path: '/health',
+    responses: {
+      '200': { description: 'Backend health.', schema: health },
+    },
+  },
+  {
     method: 'post',
     path: '/v1/powersync/credentials',
     responses: {
@@ -67,14 +72,9 @@ export const apiContracts: readonly ApiContract[] = [
         schema: credentialError('temporarily_unavailable'),
       },
     },
+    security: 'cognitoAccessToken',
   },
 ];
-export const eventContracts: Readonly<Record<string, EventContract>> = {};
-
-interface ContractCatalog {
-  readonly apiContracts: readonly ApiContract[];
-  readonly eventContracts: Readonly<Record<string, EventContract>>;
-}
 
 interface OpenApiDocument {
   readonly components: {
@@ -86,53 +86,32 @@ interface OpenApiDocument {
   readonly paths: Record<string, unknown>;
 }
 
-interface EventDocument {
-  readonly events: Record<string, unknown>;
-  readonly schemaVersion: '1.0.0';
+function jsonContent(schema: z.ZodType): Record<string, unknown> {
+  return {
+    'application/json': {
+      schema: z.toJSONSchema(schema, { target: 'draft-2020-12' }),
+    },
+  };
 }
 
-export function buildContractDocuments(
-  catalog: ContractCatalog = { apiContracts, eventContracts },
-): {
-  readonly events: EventDocument;
-  readonly openapi: OpenApiDocument;
-} {
+export function buildOpenApiDocument(
+  catalog: readonly ApiContract[] = apiContracts,
+): OpenApiDocument {
   const paths: Record<string, Record<string, unknown>> = {};
-  for (const contract of catalog.apiContracts) {
-    const responses = contract.responses === undefined
-      ? {
-          '200': {
-            content: contract.response === undefined
-              ? undefined
-              : {
-                  'application/json': {
-                    schema: z.toJSONSchema(contract.response, {
-                      target: 'draft-2020-12',
-                    }),
-                  },
-                },
-            description: 'Successful response',
-          },
-        }
-      : Object.fromEntries(
-          Object.entries(contract.responses).map(([status, response]) => [
-            status,
-            {
-              ...(response.schema === undefined
-                ? {}
-                : {
-                    content: {
-                      'application/json': {
-                        schema: z.toJSONSchema(response.schema, {
-                          target: 'draft-2020-12',
-                        }),
-                      },
-                    },
-                  }),
-              description: response.description,
-            },
-          ]),
-        );
+  for (const contract of catalog) {
+    const declaredResponses = Object.entries(contract.responses);
+    if (declaredResponses.length === 0) {
+      throw new Error(`${contract.method.toUpperCase()} ${contract.path} needs at least one response.`);
+    }
+    const responses = Object.fromEntries(
+      declaredResponses.map(([status, response]) => [
+        status,
+        {
+          ...(response.schema === undefined ? {} : { content: jsonContent(response.schema) }),
+          description: response.description,
+        },
+      ]),
+    );
     paths[contract.path] = {
       ...paths[contract.path],
       [contract.method]: {
@@ -141,17 +120,13 @@ export function buildContractDocuments(
           : {
               requestBody: {
                 content: {
-                  'application/json': {
-                    schema: z.toJSONSchema(contract.request, {
-                      target: 'draft-2020-12',
-                    }),
-                  },
+                  ...jsonContent(contract.request),
                 },
                 required: true,
               },
             }),
         responses,
-        ...(contract.accessToken === true
+        ...(contract.security === 'cognitoAccessToken'
           ? { security: [{ cognitoAccessToken: [] }] }
           : {}),
       },
@@ -159,16 +134,6 @@ export function buildContractDocuments(
   }
 
   return {
-    events: {
-      events: Object.fromEntries(
-        Object.entries(catalog.eventContracts).map(([name, contract]) => [
-          name,
-          z.toJSONSchema(contract.schema, { target: 'draft-2020-12' }),
-        ]),
-      ),
-      schemaVersion: '1.0.0',
-    },
-    openapi: {
       components: {
         schemas: {},
         securitySchemes: {
@@ -185,6 +150,5 @@ export function buildContractDocuments(
       },
       openapi: '3.1.0',
       paths,
-    },
   };
 }

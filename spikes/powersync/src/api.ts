@@ -8,7 +8,7 @@ const issuer = 'gh29-local-proof-api';
 const checklist = z.strictObject({
   title: z.string().min(1).max(200),
   items: z.array(z.strictObject({
-    id: z.uuid(), text: z.string().min(1).max(1000), checked: z.boolean(),
+    id: z.uuid(), text: z.string().min(1).max(1000),
   })).max(200),
 }).refine(value => new Set(value.items.map(item => item.id)).size === value.items.length);
 const upload = z.strictObject({ content: z.string() });

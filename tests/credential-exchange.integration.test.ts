@@ -9,7 +9,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 
 import { createCognitoAccessTokenVerifier } from '../src/auth/cognito-access-token-verifier.js';
 import {
-  createPowerSyncCredentialIssuer,
+  createPowerSyncCredentialAuthority,
   createPowerSyncCredentialService,
 } from '../src/auth/powersync-credential-service.js';
 import { createHandler } from '../src/handler.js';
@@ -79,8 +79,7 @@ async function cognitoToken(tokenUse: 'access' | 'id'): Promise<string> {
 }
 
 function handler() {
-  const credentialIssuer = createPowerSyncCredentialIssuer({
-    audience: powerSyncEndpoint,
+  const authority = createPowerSyncCredentialAuthority({
     endpoint: powerSyncEndpoint,
     issuer: powerSyncIssuer,
     keyId: 'powersync-test',
@@ -93,8 +92,9 @@ function handler() {
     ),
     credentials: createPowerSyncCredentialService(
       { read: () => Promise.resolve('active') },
-      credentialIssuer,
+      authority.credentials,
     ),
+    jwks: authority.jwks,
   });
 }
 

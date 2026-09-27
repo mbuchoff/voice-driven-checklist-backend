@@ -25,7 +25,7 @@ tofu fmt -check -recursive infra
 ```
 
 `npm run build` bundles `src/handler.ts` and generates the version-pinned
-OpenAPI and event-catalog documents under the ignored `dist/` directory.
+The generated OpenAPI document under the ignored `dist/` directory.
 Runtime TypeScript schemas in `src/contracts/` are the contract source of
 truth. The current OpenAPI document contains the public JWKS and authenticated
 PowerSync credential routes.
